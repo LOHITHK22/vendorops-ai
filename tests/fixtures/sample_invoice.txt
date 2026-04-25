@@ -1,0 +1,5 @@
+Invoice Number: INV-001
+Vendor: Acme Software LLC
+Invoice Date: 2026-04-01
+Total: 100.00 USD
+

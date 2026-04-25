@@ -31,13 +31,19 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 0 is complete:
+Phase 1 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
 - Environment template added in `.env.example`.
 - `.gitignore` added.
 - README skeleton added.
+- FastAPI app factory added.
+- Health endpoint added.
+- File upload endpoint added for `.csv`, `.eml`, `.pdf`, and `.txt`.
+- Job creation and job status endpoints added.
+- Local file storage added for uploaded files.
+- Phase 1 API tests added.
 
 ## Local Setup
 
@@ -80,17 +86,63 @@ Copy-Item .env.example .env
 
 ## Planned API Examples
 
-These endpoints will be implemented in later phases:
+Implemented endpoints:
 
 ```text
 GET  /health
 POST /v1/files
 POST /v1/jobs
 GET  /v1/jobs/{job_id}
+```
+
+Planned endpoints:
+
+```text
 GET  /v1/records
 GET  /v1/validation-errors
 POST /v1/reports
 GET  /v1/reports/{report_id}/download
+```
+
+## Run The API
+
+```bash
+uvicorn app.api.main:app --reload
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## API Examples
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Upload a file:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/files \
+  -F "file=@tests/fixtures/sample_invoice.txt"
+```
+
+Create a job:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/jobs \
+  -H "Content-Type: application/json" \
+  -d '{"file_id":"<FILE_ID>","pipeline":"document_extraction"}'
+```
+
+Check job status:
+
+```bash
+curl http://127.0.0.1:8000/v1/jobs/<JOB_ID>
 ```
 
 ## Planned Architecture
@@ -116,7 +168,7 @@ Reports + API Responses
 
 ## Testing
 
-Tests will be added in Phase 10. Once available, run:
+Run the current test suite:
 
 ```bash
 pytest
@@ -125,4 +177,3 @@ pytest
 ## Resume Positioning
 
 VendorOps AI demonstrates backend engineering, data engineering, AI extraction workflows, structured validation, pipeline reliability, and production-style API design.
-

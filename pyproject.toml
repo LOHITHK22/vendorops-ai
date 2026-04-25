@@ -43,7 +43,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = [".venv", ".tmp", "storage", "reports_out", "uploads"]
+extend-exclude = [".venv", ".tmp", ".pytest_tmp", ".test_storage", "storage", "reports_out", "uploads"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
