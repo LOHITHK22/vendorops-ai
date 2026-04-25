@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 8 is complete:
+Phase 9 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -73,6 +73,11 @@ Phase 8 is complete:
 - Extraction and parser failures are persisted in `extraction_errors`.
 - Audit log and extraction error APIs added.
 - Dashboard observability panel added for recent audit events and extraction failures.
+- Backend Dockerfile added for the FastAPI runtime.
+- Frontend Dockerfile added for a production Nginx-served React build.
+- Docker Compose stack added with persistent SQLite, upload, and report volumes.
+- Nginx proxy config added for same-origin `/health` and `/v1` API calls.
+- Deployment guide added in `deploy/README.md`.
 
 ## Local Setup
 
@@ -171,6 +176,8 @@ http://127.0.0.1:8000/docs
 
 The premium dashboard UI lives in `frontend/` and uses React, TypeScript, Vite, Tailwind CSS, and Lucide icons.
 
+In local development, Vite proxies `/health` and `/v1` API calls to `http://127.0.0.1:8000`.
+
 Install frontend dependencies:
 
 ```powershell
@@ -214,6 +221,35 @@ Build the frontend:
 cd frontend
 npm run build
 ```
+
+## Run With Docker
+
+Build and start the full stack:
+
+```powershell
+cd "C:\Users\Princ\Documents\Codex\2026-04-24\VendorOps AI"
+docker compose up --build
+```
+
+Open the dashboard:
+
+```text
+http://127.0.0.1:5173
+```
+
+Open the API docs:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Stop the stack:
+
+```powershell
+docker compose down
+```
+
+To include a real OpenAI API key, copy `.env.docker.example` to `.env`, set `OPENAI_API_KEY`, and restart Compose. If no API key is set, the mock extractor is used.
 
 ## API Examples
 
