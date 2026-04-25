@@ -1,29 +1,42 @@
+import asyncio
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.api.main import app
-from app.api.state import app_state
 from app.config.settings import Settings, get_settings
+from app.db.models import AuditLog, ProcessingJob, UploadedFile
+from app.db.session import get_sessionmaker, init_db
 
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    app_state.reset()
-    storage_dir = Path(".test_storage") / str(uuid4())
+    test_root = Path(".test_storage") / str(uuid4())
+    storage_dir = test_root / "storage"
+    database_path = test_root / "vendorops_test.db"
+    test_root.mkdir(parents=True, exist_ok=True)
+    database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
+    asyncio.run(init_db(database_url))
 
     def override_settings() -> Settings:
-        return Settings(local_storage_dir=storage_dir)
+        return Settings(local_storage_dir=storage_dir, database_url=database_url)
 
     app.dependency_overrides[get_settings] = override_settings
     with TestClient(app) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
-    app_state.reset()
+
+
+async def count_rows(database_url: str, model: type) -> int:
+    sessionmaker = get_sessionmaker(database_url)
+    async with sessionmaker() as session:
+        result = await session.execute(select(model))
+        return len(result.scalars().all())
 
 
 def test_health_check(client: TestClient) -> None:
@@ -60,6 +73,11 @@ def test_upload_file_and_create_job(client: TestClient) -> None:
     status_response = client.get(f"/v1/jobs/{job['job_id']}")
     assert status_response.status_code == 200
     assert status_response.json()["job_id"] == job["job_id"]
+
+    settings = app.dependency_overrides[get_settings]()
+    assert asyncio.run(count_rows(settings.database_url, UploadedFile)) == 1
+    assert asyncio.run(count_rows(settings.database_url, ProcessingJob)) == 1
+    assert asyncio.run(count_rows(settings.database_url, AuditLog)) == 2
 
 
 def test_upload_rejects_unsupported_file_type(client: TestClient) -> None:

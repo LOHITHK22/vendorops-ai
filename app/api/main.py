@@ -1,7 +1,18 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app.api.routes import files, health, jobs
 from app.config.settings import get_settings
+from app.db.session import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    await init_db(settings.database_url)
+    yield
 
 
 def create_app() -> FastAPI:
@@ -11,6 +22,7 @@ def create_app() -> FastAPI:
         debug=settings.app_debug,
         version="0.1.0",
         description="AI-powered data pipeline for document ingestion and extraction.",
+        lifespan=lifespan,
     )
 
     app.include_router(health.router)
@@ -21,4 +33,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

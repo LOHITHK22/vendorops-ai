@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 1 is complete:
+Phase 2 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -44,6 +44,10 @@ Phase 1 is complete:
 - Job creation and job status endpoints added.
 - Local file storage added for uploaded files.
 - Phase 1 API tests added.
+- SQLAlchemy async database layer added.
+- SQLite-backed tables added for uploaded files, processing jobs, extracted records, validation errors, audit logs, and generated reports.
+- Upload and job endpoints now persist to the database.
+- Audit events are created for file uploads and job creation.
 
 ## Local Setup
 
@@ -165,6 +169,25 @@ SQLite/PostgreSQL
         v
 Reports + API Responses
 ```
+
+## Database
+
+The MVP defaults to SQLite:
+
+```env
+DATABASE_URL=sqlite+aiosqlite:///./vendorops.db
+```
+
+The database layer uses SQLAlchemy async models and is designed so the URL can later be changed to PostgreSQL with minimal application-code changes.
+
+Current tables:
+
+- `uploaded_files`
+- `processing_jobs`
+- `extracted_records`
+- `validation_errors`
+- `audit_logs`
+- `generated_reports`
 
 ## Testing
 

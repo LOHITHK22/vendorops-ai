@@ -1,0 +1,147 @@
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from sqlalchemy import JSON as SQLAlchemyJSON
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def new_uuid() -> str:
+    return str(uuid4())
+
+
+class UploadedFile(Base):
+    __tablename__ = "uploaded_files"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="uploaded")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    jobs: Mapped[list["ProcessingJob"]] = relationship(
+        back_populates="uploaded_file",
+        cascade="all, delete-orphan",
+    )
+    extracted_records: Mapped[list["ExtractedRecord"]] = relationship(
+        back_populates="uploaded_file",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    file_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("uploaded_files.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    pipeline: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="queued")
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    uploaded_file: Mapped[UploadedFile] = relationship(back_populates="jobs")
+    extracted_records: Mapped[list["ExtractedRecord"]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
+
+
+class ExtractedRecord(Base):
+    __tablename__ = "extracted_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    file_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("uploaded_files.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    job_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("processing_jobs.id", ondelete="SET NULL"),
+        index=True,
+    )
+    record_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    vendor_name: Mapped[str | None] = mapped_column(String(255), index=True)
+    external_reference: Mapped[str | None] = mapped_column(String(255), index=True)
+    normalized_payload: Mapped[dict] = mapped_column(SQLAlchemyJSON, nullable=False)
+    raw_payload: Mapped[dict | None] = mapped_column(SQLAlchemyJSON)
+    confidence: Mapped[float | None]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    uploaded_file: Mapped[UploadedFile] = relationship(back_populates="extracted_records")
+    job: Mapped[ProcessingJob | None] = relationship(back_populates="extracted_records")
+
+
+class ValidationError(Base):
+    __tablename__ = "validation_errors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    record_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("extracted_records.id", ondelete="CASCADE"),
+        index=True,
+    )
+    job_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("processing_jobs.id", ondelete="CASCADE"),
+        index=True,
+    )
+    field_name: Mapped[str | None] = mapped_column(String(255))
+    error_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    severity: Mapped[str] = mapped_column(String(50), nullable=False, default="error")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    actor: Mapped[str] = mapped_column(String(100), nullable=False, default="system")
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    entity_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    details: Mapped[dict | None] = mapped_column(SQLAlchemyJSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class GeneratedReport(Base):
+    __tablename__ = "generated_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    report_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="created")
+    parameters: Mapped[dict] = mapped_column(SQLAlchemyJSON, nullable=False, default=dict)
+    storage_path: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+Index("idx_jobs_file_pipeline", ProcessingJob.file_id, ProcessingJob.pipeline)
+Index("idx_records_vendor_type", ExtractedRecord.vendor_name, ExtractedRecord.record_type)
+

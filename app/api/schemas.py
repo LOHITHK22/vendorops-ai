@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
 class JobStatus(StrEnum):
@@ -48,26 +48,5 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
-class FileRecord(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    file_id: UUID
-    original_filename: str
-    content_type: str
-    size_bytes: int
-    sha256_hash: str
-    storage_path: str
-    created_at: datetime
-
-
-class JobRecord(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    job_id: UUID
-    file_id: UUID
-    pipeline: str
-    status: JobStatus
-    created_at: datetime
-    updated_at: datetime
-    error_message: str | None = None
-
+class DatabaseSummaryResponse(BaseModel):
+    tables: list[str]
