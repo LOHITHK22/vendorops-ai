@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     AuditLog,
     ExtractedRecord,
+    ExtractionErrorLog,
     GeneratedReport,
     ProcessingJob,
     UploadedFile,
@@ -274,6 +275,67 @@ async def create_audit_log(
     return audit_log
 
 
+async def list_audit_logs(session: AsyncSession, *, limit: int = 50) -> list[AuditLog]:
+    result = await session.execute(
+        select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
+    )
+    return list(result.scalars().all())
+
+
 async def count_audit_logs(session: AsyncSession) -> int:
     result = await session.execute(select(AuditLog))
     return len(result.scalars().all())
+
+
+async def create_extraction_error(
+    session: AsyncSession,
+    *,
+    stage: str,
+    error_type: str,
+    message: str,
+    retryable: bool,
+    attempt: int,
+    job_id: UUID | None = None,
+    file_id: UUID | None = None,
+    details: dict | None = None,
+) -> ExtractionErrorLog:
+    error_log = ExtractionErrorLog(
+        job_id=str(job_id) if job_id else None,
+        file_id=str(file_id) if file_id else None,
+        stage=stage,
+        error_type=error_type,
+        message=message,
+        retryable=retryable,
+        attempt=attempt,
+        details=details,
+    )
+    session.add(error_log)
+    await session.flush()
+    await create_audit_log(
+        session,
+        action="pipeline.error_recorded",
+        entity_type="extraction_error",
+        entity_id=error_log.id,
+        details={
+            "job_id": str(job_id) if job_id else None,
+            "file_id": str(file_id) if file_id else None,
+            "stage": stage,
+            "error_type": error_type,
+            "retryable": retryable,
+            "attempt": attempt,
+        },
+    )
+    await session.commit()
+    await session.refresh(error_log)
+    return error_log
+
+
+async def list_extraction_errors(
+    session: AsyncSession,
+    *,
+    limit: int = 50,
+) -> list[ExtractionErrorLog]:
+    result = await session.execute(
+        select(ExtractionErrorLog).order_by(ExtractionErrorLog.created_at.desc()).limit(limit)
+    )
+    return list(result.scalars().all())

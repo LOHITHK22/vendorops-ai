@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import JSON as SQLAlchemyJSON
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -131,6 +131,29 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class ExtractionErrorLog(Base):
+    __tablename__ = "extraction_errors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    job_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("processing_jobs.id", ondelete="SET NULL"),
+        index=True,
+    )
+    file_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("uploaded_files.id", ondelete="SET NULL"),
+        index=True,
+    )
+    stage: Mapped[str] = mapped_column(String(100), nullable=False)
+    error_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    retryable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    details: Mapped[dict | None] = mapped_column(SQLAlchemyJSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class GeneratedReport(Base):
     __tablename__ = "generated_reports"
 
@@ -144,4 +167,3 @@ class GeneratedReport(Base):
 
 Index("idx_jobs_file_pipeline", ProcessingJob.file_id, ProcessingJob.pipeline)
 Index("idx_records_vendor_type", ExtractedRecord.vendor_name, ExtractedRecord.record_type)
-

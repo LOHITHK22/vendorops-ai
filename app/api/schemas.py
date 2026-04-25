@@ -114,3 +114,26 @@ class GeneratedReportResponse(BaseModel):
     parameters: dict
     storage_path: str | None = None
     created_at: datetime
+
+
+class AuditLogResponse(BaseModel):
+    audit_log_id: UUID
+    actor: str
+    action: str
+    entity_type: str
+    entity_id: str | None = None
+    details: dict | None = None
+    created_at: datetime
+
+
+class ExtractionErrorResponse(BaseModel):
+    error_id: UUID
+    job_id: UUID | None = None
+    file_id: UUID | None = None
+    stage: str
+    error_type: str
+    message: str
+    retryable: bool
+    attempt: int
+    details: dict | None = None
+    created_at: datetime

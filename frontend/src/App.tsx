@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   BarChart3,
   CheckCircle2,
@@ -25,13 +26,17 @@ import {
   API_BASE_URL,
   type GeneratedReportResponse,
   type HealthResponse,
+  type AuditLogResponse,
   type ExtractedRecordResponse,
+  type ExtractionErrorResponse,
   type ParsedDocumentResponse,
   type ProcessingJobResponse,
   type UploadedFileResponse,
   type ValidationErrorResponse,
   createReport,
   extractFile,
+  getAuditLogs,
+  getExtractionErrors,
   getReportDownloadUrl,
   getHealth,
   parseFile,
@@ -70,6 +75,8 @@ export default function App() {
   const [extractedRecord, setExtractedRecord] = useState<ExtractedRecordResponse | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrorResponse[]>([]);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReportResponse[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogResponse[]>([]);
+  const [extractionErrors, setExtractionErrors] = useState<ExtractionErrorResponse[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -77,7 +84,19 @@ export default function App() {
     getHealth()
       .then(setHealth)
       .catch((error: Error) => setHealthError(error.message));
+    void refreshObservability();
   }, []);
+
+  async function refreshObservability() {
+    try {
+      const [logs, errors] = await Promise.all([getAuditLogs(), getExtractionErrors()]);
+      setAuditLogs(logs);
+      setExtractionErrors(errors);
+    } catch {
+      setAuditLogs([]);
+      setExtractionErrors([]);
+    }
+  }
 
   const metrics = useMemo(
     () => [
@@ -137,9 +156,11 @@ export default function App() {
       setValidationErrors(extraction.validation_errors);
       setParsedDocument(parsed);
       setUploadState("uploaded");
+      void refreshObservability();
     } catch (error) {
       setUploadState("error");
       setFormError(error instanceof Error ? error.message : "Upload failed.");
+      void refreshObservability();
     }
   }
 
@@ -177,6 +198,14 @@ export default function App() {
               onReportGenerated={(report) =>
                 setGeneratedReports((currentReports) => [report, ...currentReports])
               }
+            />
+          </section>
+
+          <section className="mt-6">
+            <ObservabilityPanel
+              auditLogs={auditLogs}
+              extractionErrors={extractionErrors}
+              onRefresh={() => void refreshObservability()}
             />
           </section>
         </main>
@@ -333,7 +362,7 @@ function UploadPanel({
           </p>
         </div>
         <span className="rounded-full bg-cloud-100 px-3 py-1 text-xs font-semibold text-ink-500">
-          PDF · CSV · TXT · EML
+          PDF / CSV / TXT / EML
         </span>
       </div>
 
@@ -644,7 +673,7 @@ function ReportsPanel({
               target="_blank"
             >
               <span className="font-medium text-ink-700">
-                {report.report_type} · {String(report.parameters.format).toUpperCase()}
+                {report.report_type} / {String(report.parameters.format).toUpperCase()}
               </span>
               <span className="text-xs font-semibold text-brand-700">Download</span>
             </a>
@@ -655,9 +684,112 @@ function ReportsPanel({
       <div className="mt-5 rounded-lg bg-gradient-to-br from-ink-950 to-brand-700 p-4 text-white">
         <p className="text-sm font-semibold">Next milestone</p>
         <p className="mt-2 text-sm leading-6 text-white/75">
-          Phase 8 adds structured logging, retry handling, richer error tracking, and observability
-          views around these report and pipeline runs.
+          Phase 9 packages the API, dashboard, database, and runtime configuration for Docker-based
+          deployment.
         </p>
+      </div>
+    </section>
+  );
+}
+
+function ObservabilityPanel({
+  auditLogs,
+  extractionErrors,
+  onRefresh,
+}: {
+  auditLogs: AuditLogResponse[];
+  extractionErrors: ExtractionErrorResponse[];
+  onRefresh: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-cloud-200 bg-white p-5 shadow-soft sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-brand-700">Observability</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink-950">
+            Pipeline control plane
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">
+            Request tracing, audit events, retry attempts, and extraction failures are surfaced for
+            production-style operations.
+          </p>
+        </div>
+        <button
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-cloud-200 bg-white px-3 py-2 text-sm font-semibold text-ink-900 transition hover:bg-cloud-50"
+          onClick={onRefresh}
+        >
+          <Activity className="h-4 w-4" />
+          Refresh
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="rounded-lg border border-cloud-200 bg-cloud-50 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-ink-900">Extraction errors</p>
+            <span
+              className={cx(
+                "rounded-full px-3 py-1 text-xs font-semibold",
+                extractionErrors.length === 0
+                  ? "bg-mint-500/10 text-mint-600"
+                  : "bg-red-500/10 text-red-700",
+              )}
+            >
+              {extractionErrors.length}
+            </span>
+          </div>
+          <div className="mt-4 space-y-2">
+            {extractionErrors.length === 0 ? (
+              <p className="rounded-lg bg-white p-4 text-sm leading-6 text-ink-500 shadow-line">
+                No extraction errors recorded.
+              </p>
+            ) : (
+              extractionErrors.slice(0, 4).map((error) => (
+                <div key={error.error_id} className="rounded-lg bg-white p-3 shadow-line">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-ink-900">
+                        {error.stage} / {error.error_type}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-ink-500">
+                        {error.message}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-cloud-200 bg-cloud-50 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-ink-900">Recent audit events</p>
+            <ShieldCheck className="h-4 w-4 text-mint-600" />
+          </div>
+          <div className="mt-4 overflow-hidden rounded-lg border border-cloud-200 bg-white">
+            {auditLogs.length === 0 ? (
+              <p className="p-4 text-sm leading-6 text-ink-500">No audit events yet.</p>
+            ) : (
+              auditLogs.slice(0, 6).map((event) => (
+                <div
+                  key={event.audit_log_id}
+                  className="grid gap-2 border-b border-cloud-100 px-4 py-3 last:border-b-0 sm:grid-cols-[160px_1fr_120px]"
+                >
+                  <p className="truncate text-xs font-semibold text-brand-700">{event.action}</p>
+                  <p className="truncate text-sm text-ink-700">
+                    {event.entity_type}
+                    {event.entity_id ? ` / ${event.entity_id}` : ""}
+                  </p>
+                  <p className="text-xs text-ink-500 sm:text-right">
+                    {formatDate(event.created_at)}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </section>
   );

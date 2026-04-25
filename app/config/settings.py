@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4.1-mini"
 
     log_level: str = "INFO"
+    log_format: str = "json"
+    extraction_max_attempts: int = Field(default=3, ge=1, le=5)
+    extraction_retry_base_seconds: float = Field(default=0.4, ge=0.0, le=10.0)
     cors_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
 
     @field_validator("cors_origins", mode="before")

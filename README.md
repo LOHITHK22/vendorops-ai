@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 7 is complete:
+Phase 8 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -45,7 +45,7 @@ Phase 7 is complete:
 - Local file storage added for uploaded files.
 - Phase 1 API tests added.
 - SQLAlchemy async database layer added.
-- SQLite-backed tables added for uploaded files, processing jobs, extracted records, validation errors, audit logs, and generated reports.
+- SQLite-backed tables added for uploaded files, processing jobs, extracted records, validation errors, extraction errors, audit logs, and generated reports.
 - Upload and job endpoints now persist to the database.
 - Audit events are created for file uploads and job creation.
 - Parser layer added for TXT, CSV, PDF, and EML/email-like files.
@@ -67,6 +67,12 @@ Phase 7 is complete:
 - Generated report metadata is persisted in `generated_reports`.
 - Report download endpoint added.
 - Dashboard report cards can generate and download real reports.
+- Structured JSON logging added with request IDs.
+- Request tracing middleware adds `X-Request-ID` to API responses.
+- Retry handling added around LLM extraction attempts.
+- Extraction and parser failures are persisted in `extraction_errors`.
+- Audit log and extraction error APIs added.
+- Dashboard observability panel added for recent audit events and extraction failures.
 
 ## Local Setup
 
@@ -127,15 +133,8 @@ POST /v1/reports
 GET  /v1/reports
 GET  /v1/reports/{report_id}
 GET  /v1/reports/{report_id}/download
-```
-
-Planned endpoints:
-
-```text
-GET  /v1/records
-GET  /v1/validation-errors
-POST /v1/reports
-GET  /v1/reports/{report_id}/download
+GET  /v1/audit-logs
+GET  /v1/extraction-errors
 ```
 
 ## Run The API
@@ -420,6 +419,23 @@ Supported formats:
 - `csv`
 
 Generated reports are written to `REPORTS_DIR` and tracked in `generated_reports`.
+
+## Observability
+
+Phase 8 adds production-style operational visibility:
+
+- JSON logs with request IDs, route, status code, and latency.
+- `X-Request-ID` response headers for tracing API calls.
+- Retry tracking for transient LLM extraction failures.
+- Persistent extraction error records for parser and extractor failures.
+- Audit log API for file, job, record, validation, report, and error events.
+
+Observability endpoints:
+
+```text
+GET /v1/audit-logs?limit=50
+GET /v1/extraction-errors?limit=50
+```
 
 ## Testing
 

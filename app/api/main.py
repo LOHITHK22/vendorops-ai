@@ -4,9 +4,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import files, health, jobs, records, reports, validation
+from app.api.routes import files, health, jobs, observability, records, reports, validation
 from app.config.settings import get_settings
 from app.db.session import init_db
+from app.observability.logging import configure_logging
+from app.observability.middleware import RequestLoggingMiddleware
 
 
 @asynccontextmanager
@@ -18,6 +20,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(settings)
     app = FastAPI(
         title=settings.app_name,
         debug=settings.app_debug,
@@ -32,6 +35,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestLoggingMiddleware)
 
     app.include_router(health.router)
     app.include_router(files.router, prefix=settings.api_prefix)
@@ -39,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(records.router, prefix=settings.api_prefix)
     app.include_router(validation.router, prefix=settings.api_prefix)
     app.include_router(reports.router, prefix=settings.api_prefix)
+    app.include_router(observability.router, prefix=settings.api_prefix)
 
     return app
 

@@ -76,6 +76,29 @@ export type GeneratedReportResponse = {
   created_at: string;
 };
 
+export type AuditLogResponse = {
+  audit_log_id: string;
+  actor: string;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  details?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type ExtractionErrorResponse = {
+  error_id: string;
+  job_id?: string | null;
+  file_id?: string | null;
+  stage: string;
+  error_type: string;
+  message: string;
+  retryable: boolean;
+  attempt: number;
+  details?: Record<string, unknown> | null;
+  created_at: string;
+};
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ detail: response.statusText }));
@@ -131,6 +154,16 @@ export async function createReport(
     body: JSON.stringify({ report_type: reportType, format }),
   });
   return parseJsonResponse<GeneratedReportResponse>(response);
+}
+
+export async function getAuditLogs(limit = 8): Promise<AuditLogResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/v1/audit-logs?limit=${limit}`);
+  return parseJsonResponse<AuditLogResponse[]>(response);
+}
+
+export async function getExtractionErrors(limit = 8): Promise<ExtractionErrorResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/v1/extraction-errors?limit=${limit}`);
+  return parseJsonResponse<ExtractionErrorResponse[]>(response);
 }
 
 export function getReportDownloadUrl(reportId: string): string {
