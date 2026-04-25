@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 2 is complete:
+Phase 3 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -48,6 +48,8 @@ Phase 2 is complete:
 - SQLite-backed tables added for uploaded files, processing jobs, extracted records, validation errors, audit logs, and generated reports.
 - Upload and job endpoints now persist to the database.
 - Audit events are created for file uploads and job creation.
+- Parser layer added for TXT, CSV, PDF, and EML/email-like files.
+- Uploaded files can be parsed through `GET /v1/files/{file_id}/parsed`.
 
 ## Local Setup
 
@@ -95,6 +97,7 @@ Implemented endpoints:
 ```text
 GET  /health
 POST /v1/files
+GET  /v1/files/{file_id}/parsed
 POST /v1/jobs
 GET  /v1/jobs/{job_id}
 ```
@@ -149,6 +152,12 @@ Check job status:
 curl http://127.0.0.1:8000/v1/jobs/<JOB_ID>
 ```
 
+Parse an uploaded file:
+
+```bash
+curl http://127.0.0.1:8000/v1/files/<FILE_ID>/parsed
+```
+
 ## Planned Architecture
 
 ```text
@@ -188,6 +197,22 @@ Current tables:
 - `validation_errors`
 - `audit_logs`
 - `generated_reports`
+
+## Parser Layer
+
+The parser dispatcher normalizes supported file types into one shape:
+
+- `text`: extracted text for downstream LLM extraction.
+- `metadata`: source-specific metadata such as filename, row count, columns, headers, or page count.
+- `pages`: PDF page-level text.
+- `tables`: CSV rows and columns.
+
+Supported parsers:
+
+- TXT: UTF-8 text extraction.
+- CSV: header/row extraction using Python's standard `csv` module.
+- EML: subject/from/to/date headers and plain-text body extraction.
+- PDF: text extraction using PyMuPDF.
 
 ## Testing
 

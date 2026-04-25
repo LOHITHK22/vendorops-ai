@@ -79,6 +79,12 @@ def test_upload_file_and_create_job(client: TestClient) -> None:
     assert asyncio.run(count_rows(settings.database_url, ProcessingJob)) == 1
     assert asyncio.run(count_rows(settings.database_url, AuditLog)) == 2
 
+    parse_response = client.get(f"/v1/files/{uploaded_file['file_id']}/parsed")
+    assert parse_response.status_code == 200
+    parsed_file = parse_response.json()
+    assert parsed_file["file_type"] == "txt"
+    assert "Invoice Number: INV-001" in parsed_file["text"]
+
 
 def test_upload_rejects_unsupported_file_type(client: TestClient) -> None:
     response = client.post(
@@ -98,5 +104,11 @@ def test_create_job_requires_existing_file(client: TestClient) -> None:
             "pipeline": "document_extraction",
         },
     )
+
+    assert response.status_code == 404
+
+
+def test_parse_requires_existing_file(client: TestClient) -> None:
+    response = client.get("/v1/files/00000000-0000-0000-0000-000000000000/parsed")
 
     assert response.status_code == 404

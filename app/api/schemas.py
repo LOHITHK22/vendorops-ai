@@ -50,3 +50,23 @@ class ErrorResponse(BaseModel):
 
 class DatabaseSummaryResponse(BaseModel):
     tables: list[str]
+
+
+class ParsedPageResponse(BaseModel):
+    page_number: int
+    text: str
+
+
+class ParsedTableResponse(BaseModel):
+    name: str
+    columns: list[str]
+    rows: list[dict]
+
+
+class ParsedDocumentResponse(BaseModel):
+    source_path: str
+    file_type: str
+    text: str
+    metadata: dict
+    pages: list[ParsedPageResponse]
+    tables: list[ParsedTableResponse]

@@ -4,11 +4,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import UploadedFileResponse
+from app.api.schemas import ParsedDocumentResponse, UploadedFileResponse
 from app.config.settings import Settings, get_settings
-from app.db.repositories import create_uploaded_file
+from app.db.repositories import create_uploaded_file, get_uploaded_file
 from app.db.session import get_db_session
 from app.ingestion.storage import store_upload
+from app.parsers.dispatcher import parse_file
+from app.parsers.models import ParserError
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -48,3 +50,26 @@ async def upload_file(
         storage_path=uploaded_file.storage_path,
         created_at=uploaded_file.created_at,
     )
+
+
+@router.get("/{file_id}/parsed", response_model=ParsedDocumentResponse)
+async def parse_uploaded_file(
+    file_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ParsedDocumentResponse:
+    uploaded_file = await get_uploaded_file(session, file_id)
+    if uploaded_file is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File '{file_id}' was not found.",
+        )
+
+    try:
+        parsed_document = parse_file(uploaded_file.storage_path)
+    except ParserError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    return ParsedDocumentResponse(**parsed_document.model_dump())
