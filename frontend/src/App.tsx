@@ -28,6 +28,7 @@ import {
   type ParsedDocumentResponse,
   type ProcessingJobResponse,
   type UploadedFileResponse,
+  type ValidationErrorResponse,
   extractFile,
   getHealth,
   parseFile,
@@ -64,6 +65,7 @@ export default function App() {
   const [job, setJob] = useState<ProcessingJobResponse | null>(null);
   const [parsedDocument, setParsedDocument] = useState<ParsedDocumentResponse | null>(null);
   const [extractedRecord, setExtractedRecord] = useState<ExtractedRecordResponse | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrorResponse[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -117,6 +119,7 @@ export default function App() {
     setJob(null);
     setParsedDocument(null);
     setExtractedRecord(null);
+    setValidationErrors([]);
 
     try {
       const uploaded = await uploadFile(selectedFile);
@@ -127,6 +130,7 @@ export default function App() {
       ]);
       setJob(extraction.job);
       setExtractedRecord(extraction.record);
+      setValidationErrors(extraction.validation_errors);
       setParsedDocument(parsed);
       setUploadState("uploaded");
     } catch (error) {
@@ -161,7 +165,11 @@ export default function App() {
 
           <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
             <ExtractionPreview parsedDocument={parsedDocument} extractedRecord={extractedRecord} />
-            <ReportsPanel uploadedFile={uploadedFile} extractedRecord={extractedRecord} />
+            <ReportsPanel
+              uploadedFile={uploadedFile}
+              extractedRecord={extractedRecord}
+              validationErrors={validationErrors}
+            />
           </section>
         </main>
       </div>
@@ -493,9 +501,11 @@ function InfoTile({ label, value }: { label: string; value: string }) {
 function ReportsPanel({
   uploadedFile,
   extractedRecord,
+  validationErrors,
 }: {
   uploadedFile: UploadedFileResponse | null;
   extractedRecord: ExtractedRecordResponse | null;
+  validationErrors: ValidationErrorResponse[];
 }) {
   const rows = [
     {
@@ -505,7 +515,7 @@ function ReportsPanel({
     },
     {
       name: "Validation exceptions",
-      status: extractedRecord ? "Extraction ready" : "Waiting",
+      status: extractedRecord ? `${validationErrors.length} findings` : "Waiting",
       icon: ShieldCheck,
     },
     {
@@ -539,10 +549,43 @@ function ReportsPanel({
         ))}
       </div>
 
+      {extractedRecord ? (
+        <div className="mt-5 rounded-lg border border-cloud-200 bg-cloud-50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-ink-900">Validation result</p>
+            <span
+              className={cx(
+                "rounded-full px-3 py-1 text-xs font-semibold",
+                validationErrors.length === 0
+                  ? "bg-mint-500/10 text-mint-600"
+                  : "bg-amber-500/10 text-amber-700",
+              )}
+            >
+              {validationErrors.length === 0 ? "Passed" : "Needs review"}
+            </span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {validationErrors.length === 0 ? (
+              <p className="text-sm leading-6 text-ink-500">
+                Required fields, confidence, amounts, and source evidence checks passed.
+              </p>
+            ) : (
+              validationErrors.slice(0, 3).map((error) => (
+                <div key={error.validation_error_id} className="rounded-lg bg-white p-3 shadow-line">
+                  <p className="text-xs font-semibold uppercase text-amber-700">{error.severity}</p>
+                  <p className="mt-1 text-sm text-ink-700">{error.message}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-5 rounded-lg bg-gradient-to-br from-ink-950 to-brand-700 p-4 text-white">
         <p className="text-sm font-semibold">Next milestone</p>
         <p className="mt-2 text-sm leading-6 text-white/75">
-          Phase 5 adds validation rules so extracted records can produce exception reports and review queues.
+          Phase 6 connects this into a full orchestration path for ingestion, parsing, extraction,
+          validation, and storage.
         </p>
       </div>
     </section>

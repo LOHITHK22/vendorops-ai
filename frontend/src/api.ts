@@ -53,6 +53,18 @@ export type ExtractedRecordResponse = {
 export type ExtractionRunResponse = {
   job: ProcessingJobResponse;
   record: ExtractedRecordResponse;
+  validation_errors: ValidationErrorResponse[];
+};
+
+export type ValidationErrorResponse = {
+  validation_error_id: string;
+  record_id?: string | null;
+  job_id?: string | null;
+  field_name?: string | null;
+  error_type: string;
+  message: string;
+  severity: string;
+  created_at: string;
 };
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {

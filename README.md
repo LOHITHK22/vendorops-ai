@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 4 is complete:
+Phase 5 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -56,6 +56,10 @@ Phase 4 is complete:
 - Extraction endpoint added: `POST /v1/files/{file_id}/extract`.
 - Extracted records are persisted in SQLite and exposed through `/v1/records`.
 - The React dashboard now uploads, parses, extracts, and displays structured JSON output.
+- Validation rules added for required fields, confidence, amounts, line items, and source evidence.
+- Validation findings are persisted in `validation_errors`.
+- Validation errors API added.
+- The dashboard now shows pass/needs-review validation state and finding details.
 
 ## Local Setup
 
@@ -109,6 +113,8 @@ POST /v1/jobs
 GET  /v1/jobs/{job_id}
 GET  /v1/records
 GET  /v1/records/{record_id}
+GET  /v1/validation-errors
+GET  /v1/validation-errors/records/{record_id}
 ```
 
 Planned endpoints:
@@ -245,6 +251,12 @@ List extracted records:
 curl http://127.0.0.1:8000/v1/records
 ```
 
+List validation findings:
+
+```bash
+curl http://127.0.0.1:8000/v1/validation-errors
+```
+
 ## Planned Architecture
 
 ```text
@@ -321,6 +333,21 @@ The normalized extraction schema captures:
 - source evidence
 - confidence
 - review flag
+
+## Validation Layer
+
+Phase 5 validates extracted records before they are treated as business-ready data.
+
+Current checks:
+
+- Required invoice fields: vendor name, document ID, total amount, and currency.
+- Required contract fields: vendor name and document ID.
+- Confidence threshold below `0.75`.
+- Negative total amounts.
+- Negative line item amounts.
+- Missing source evidence for important extracted fields.
+
+Validation findings are saved to `validation_errors` and returned from the extraction endpoint.
 
 ## Testing
 

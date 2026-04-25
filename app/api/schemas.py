@@ -85,6 +85,18 @@ class ExtractedRecordResponse(BaseModel):
     created_at: datetime
 
 
+class ValidationErrorResponse(BaseModel):
+    validation_error_id: UUID
+    record_id: UUID | None = None
+    job_id: UUID | None = None
+    field_name: str | None = None
+    error_type: str
+    message: str
+    severity: str
+    created_at: datetime
+
+
 class ExtractionRunResponse(BaseModel):
     job: ProcessingJobResponse
     record: ExtractedRecordResponse
+    validation_errors: list[ValidationErrorResponse]

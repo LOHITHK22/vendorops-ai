@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.records import to_record_response
+from app.api.routes.validation import to_validation_error_response
 from app.api.schemas import (
     ExtractionRunResponse,
     ParsedDocumentResponse,
@@ -16,6 +17,7 @@ from app.db.repositories import (
     create_extracted_record,
     create_processing_job,
     create_uploaded_file,
+    create_validation_errors,
     get_uploaded_file,
     update_processing_job_status,
 )
@@ -24,6 +26,7 @@ from app.extraction.extractor import ExtractionError, get_extractor
 from app.ingestion.storage import store_upload
 from app.parsers.dispatcher import parse_file
 from app.parsers.models import ParserError
+from app.validation.rules import validate_extracted_record
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -119,6 +122,13 @@ async def extract_uploaded_file(
             extracted=extraction_result.record,
             raw_payload=extraction_result.model_dump(mode="json"),
         )
+        findings = validate_extracted_record(extraction_result.record)
+        validation_errors = await create_validation_errors(
+            session,
+            record_id=UUID(record.id),
+            job_id=UUID(job.id),
+            findings=findings,
+        )
         job = await update_processing_job_status(session, job=job, status="completed")
     except (ParserError, ExtractionError, ValueError) as exc:
         job = await update_processing_job_status(
@@ -143,4 +153,8 @@ async def extract_uploaded_file(
             error_message=job.error_message,
         ),
         record=to_record_response(record),
+        validation_errors=[
+            to_validation_error_response(validation_error)
+            for validation_error in validation_errors
+        ],
     )

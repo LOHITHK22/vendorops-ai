@@ -3,8 +3,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditLog, ExtractedRecord, ProcessingJob, UploadedFile
+from app.db.models import AuditLog, ExtractedRecord, ProcessingJob, UploadedFile, ValidationError
 from app.extraction.schemas import ExtractedBusinessRecord
+from app.validation.rules import ValidationFinding
 
 
 async def create_uploaded_file(
@@ -147,6 +148,61 @@ async def list_extracted_records(session: AsyncSession) -> list[ExtractedRecord]
 
 async def get_extracted_record(session: AsyncSession, record_id: UUID) -> ExtractedRecord | None:
     return await session.get(ExtractedRecord, str(record_id))
+
+
+async def create_validation_errors(
+    session: AsyncSession,
+    *,
+    record_id: UUID,
+    job_id: UUID | None,
+    findings: list[ValidationFinding],
+) -> list[ValidationError]:
+    validation_errors = [
+        ValidationError(
+            record_id=str(record_id),
+            job_id=str(job_id) if job_id else None,
+            field_name=finding.field_name,
+            error_type=finding.error_type,
+            message=finding.message,
+            severity=finding.severity.value,
+        )
+        for finding in findings
+    ]
+    session.add_all(validation_errors)
+    await create_audit_log(
+        session,
+        action="record.validated",
+        entity_type="extracted_record",
+        entity_id=str(record_id),
+        details={
+            "job_id": str(job_id) if job_id else None,
+            "finding_count": len(findings),
+            "error_count": sum(1 for finding in findings if finding.severity.value == "error"),
+        },
+    )
+    await session.commit()
+    for validation_error in validation_errors:
+        await session.refresh(validation_error)
+    return validation_errors
+
+
+async def list_validation_errors(session: AsyncSession) -> list[ValidationError]:
+    result = await session.execute(
+        select(ValidationError).order_by(ValidationError.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def list_validation_errors_for_record(
+    session: AsyncSession,
+    record_id: UUID,
+) -> list[ValidationError]:
+    result = await session.execute(
+        select(ValidationError)
+        .where(ValidationError.record_id == str(record_id))
+        .order_by(ValidationError.created_at.desc())
+    )
+    return list(result.scalars().all())
 
 
 async def create_audit_log(

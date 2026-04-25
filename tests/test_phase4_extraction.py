@@ -77,6 +77,7 @@ def test_extract_endpoint_persists_record_and_job() -> None:
         assert payload["record"]["vendor_name"] == "Acme Software LLC"
         assert payload["record"]["external_reference"] == "INV-009"
         assert payload["record"]["normalized_payload"]["total_amount"] == 199.0
+        assert payload["validation_errors"] == []
 
         records_response = client.get("/v1/records")
         assert records_response.status_code == 200
