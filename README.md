@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 3 is complete:
+Phase 4 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -50,6 +50,12 @@ Phase 3 is complete:
 - Audit events are created for file uploads and job creation.
 - Parser layer added for TXT, CSV, PDF, and EML/email-like files.
 - Uploaded files can be parsed through `GET /v1/files/{file_id}/parsed`.
+- Strict structured extraction schemas added with Pydantic.
+- Mock extractor added so the app works without an API key.
+- OpenAI extractor path added for `OPENAI_API_KEY` deployments.
+- Extraction endpoint added: `POST /v1/files/{file_id}/extract`.
+- Extracted records are persisted in SQLite and exposed through `/v1/records`.
+- The React dashboard now uploads, parses, extracts, and displays structured JSON output.
 
 ## Local Setup
 
@@ -98,8 +104,11 @@ Implemented endpoints:
 GET  /health
 POST /v1/files
 GET  /v1/files/{file_id}/parsed
+POST /v1/files/{file_id}/extract
 POST /v1/jobs
 GET  /v1/jobs/{job_id}
+GET  /v1/records
+GET  /v1/records/{record_id}
 ```
 
 Planned endpoints:
@@ -224,6 +233,18 @@ Parse an uploaded file:
 curl http://127.0.0.1:8000/v1/files/<FILE_ID>/parsed
 ```
 
+Run structured extraction:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/files/<FILE_ID>/extract
+```
+
+List extracted records:
+
+```bash
+curl http://127.0.0.1:8000/v1/records
+```
+
 ## Planned Architecture
 
 ```text
@@ -279,6 +300,27 @@ Supported parsers:
 - CSV: header/row extraction using Python's standard `csv` module.
 - EML: subject/from/to/date headers and plain-text body extraction.
 - PDF: text extraction using PyMuPDF.
+
+## LLM Extraction
+
+Phase 4 adds a structured extraction service with two modes:
+
+- Mock mode: used automatically when `OPENAI_API_KEY` is empty. This keeps local development and tests deterministic.
+- OpenAI mode: used when `OPENAI_API_KEY` is set. The extractor sends parsed source text to the OpenAI Responses API with a strict JSON schema.
+
+The normalized extraction schema captures:
+
+- record type
+- vendor name
+- document ID
+- document and due dates
+- total amount and currency
+- summary
+- line items
+- key terms
+- source evidence
+- confidence
+- review flag
 
 ## Testing
 

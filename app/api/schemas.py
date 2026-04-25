@@ -70,3 +70,21 @@ class ParsedDocumentResponse(BaseModel):
     metadata: dict
     pages: list[ParsedPageResponse]
     tables: list[ParsedTableResponse]
+
+
+class ExtractedRecordResponse(BaseModel):
+    record_id: UUID
+    file_id: UUID
+    job_id: UUID | None = None
+    record_type: str
+    vendor_name: str | None = None
+    external_reference: str | None = None
+    confidence: float | None = None
+    normalized_payload: dict
+    raw_payload: dict | None = None
+    created_at: datetime
+
+
+class ExtractionRunResponse(BaseModel):
+    job: ProcessingJobResponse
+    record: ExtractedRecordResponse

@@ -3,7 +3,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditLog, ProcessingJob, UploadedFile
+from app.db.models import AuditLog, ExtractedRecord, ProcessingJob, UploadedFile
+from app.extraction.schemas import ExtractedBusinessRecord
 
 
 async def create_uploaded_file(
@@ -78,6 +79,76 @@ async def get_processing_job(session: AsyncSession, job_id: UUID) -> ProcessingJ
     return await session.get(ProcessingJob, str(job_id))
 
 
+async def update_processing_job_status(
+    session: AsyncSession,
+    *,
+    job: ProcessingJob,
+    status: str,
+    error_message: str | None = None,
+) -> ProcessingJob:
+    job.status = status
+    job.error_message = error_message
+    await create_audit_log(
+        session,
+        action="job.status_updated",
+        entity_type="processing_job",
+        entity_id=job.id,
+        details={"status": status, "error_message": error_message},
+    )
+    await session.commit()
+    await session.refresh(job)
+    return job
+
+
+async def create_extracted_record(
+    session: AsyncSession,
+    *,
+    file_id: UUID,
+    job_id: UUID | None,
+    extracted: ExtractedBusinessRecord,
+    raw_payload: dict,
+) -> ExtractedRecord:
+    record = ExtractedRecord(
+        file_id=str(file_id),
+        job_id=str(job_id) if job_id else None,
+        record_type=extracted.record_type.value,
+        vendor_name=extracted.vendor_name,
+        external_reference=extracted.document_id,
+        normalized_payload=extracted.model_dump(mode="json"),
+        raw_payload=raw_payload,
+        confidence=extracted.confidence,
+    )
+    session.add(record)
+    await session.flush()
+    await create_audit_log(
+        session,
+        action="record.extracted",
+        entity_type="extracted_record",
+        entity_id=record.id,
+        details={
+            "file_id": str(file_id),
+            "job_id": str(job_id) if job_id else None,
+            "record_type": extracted.record_type.value,
+            "confidence": extracted.confidence,
+            "provider": raw_payload.get("provider"),
+        },
+    )
+    await session.commit()
+    await session.refresh(record)
+    return record
+
+
+async def list_extracted_records(session: AsyncSession) -> list[ExtractedRecord]:
+    result = await session.execute(
+        select(ExtractedRecord).order_by(ExtractedRecord.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_extracted_record(session: AsyncSession, record_id: UUID) -> ExtractedRecord | None:
+    return await session.get(ExtractedRecord, str(record_id))
+
+
 async def create_audit_log(
     session: AsyncSession,
     *,
@@ -101,4 +172,3 @@ async def create_audit_log(
 async def count_audit_logs(session: AsyncSession) -> int:
     result = await session.execute(select(AuditLog))
     return len(result.scalars().all())
-

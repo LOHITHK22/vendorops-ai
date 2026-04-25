@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import files, health, jobs
+from app.api.routes import files, health, jobs, records
 from app.config.settings import get_settings
 from app.db.session import init_db
 
@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(files.router, prefix=settings.api_prefix)
     app.include_router(jobs.router, prefix=settings.api_prefix)
+    app.include_router(records.router, prefix=settings.api_prefix)
 
     return app
 

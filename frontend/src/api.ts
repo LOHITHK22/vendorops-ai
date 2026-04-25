@@ -37,6 +37,24 @@ export type ParsedDocumentResponse = {
   tables: Array<{ name: string; columns: string[]; rows: Array<Record<string, unknown>> }>;
 };
 
+export type ExtractedRecordResponse = {
+  record_id: string;
+  file_id: string;
+  job_id?: string | null;
+  record_type: string;
+  vendor_name?: string | null;
+  external_reference?: string | null;
+  confidence?: number | null;
+  normalized_payload: Record<string, unknown>;
+  raw_payload?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type ExtractionRunResponse = {
+  job: ProcessingJobResponse;
+  record: ExtractedRecordResponse;
+};
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ detail: response.statusText }));
@@ -73,4 +91,11 @@ export async function createJob(fileId: string): Promise<ProcessingJobResponse> 
 export async function parseFile(fileId: string): Promise<ParsedDocumentResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/files/${fileId}/parsed`);
   return parseJsonResponse<ParsedDocumentResponse>(response);
+}
+
+export async function extractFile(fileId: string): Promise<ExtractionRunResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/files/${fileId}/extract`, {
+    method: "POST",
+  });
+  return parseJsonResponse<ExtractionRunResponse>(response);
 }

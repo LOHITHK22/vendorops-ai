@@ -24,10 +24,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   API_BASE_URL,
   type HealthResponse,
+  type ExtractedRecordResponse,
   type ParsedDocumentResponse,
   type ProcessingJobResponse,
   type UploadedFileResponse,
-  createJob,
+  extractFile,
   getHealth,
   parseFile,
   uploadFile,
@@ -62,6 +63,7 @@ export default function App() {
   const [uploadedFile, setUploadedFile] = useState<UploadedFileResponse | null>(null);
   const [job, setJob] = useState<ProcessingJobResponse | null>(null);
   const [parsedDocument, setParsedDocument] = useState<ParsedDocumentResponse | null>(null);
+  const [extractedRecord, setExtractedRecord] = useState<ExtractedRecordResponse | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -87,8 +89,10 @@ export default function App() {
       },
       {
         label: "Parser status",
-        value: parsedDocument ? "Live" : "Idle",
-        change: parsedDocument ? `${parsedDocument.file_type.toUpperCase()} normalized` : "Parser standby",
+        value: extractedRecord ? "Ready" : "Idle",
+        change: extractedRecord
+          ? `${Math.round((extractedRecord.confidence ?? 0) * 100)}% extraction confidence`
+          : "Extractor standby",
         icon: Gauge,
       },
       {
@@ -98,7 +102,7 @@ export default function App() {
         icon: Server,
       },
     ],
-    [health, healthError, job, parsedDocument, uploadedFile],
+    [extractedRecord, health, healthError, job, uploadedFile],
   );
 
   async function handleUpload() {
@@ -112,15 +116,17 @@ export default function App() {
     setUploadedFile(null);
     setJob(null);
     setParsedDocument(null);
+    setExtractedRecord(null);
 
     try {
       const uploaded = await uploadFile(selectedFile);
       setUploadedFile(uploaded);
-      const [newJob, parsed] = await Promise.all([
-        createJob(uploaded.file_id),
+      const [extraction, parsed] = await Promise.all([
+        extractFile(uploaded.file_id),
         parseFile(uploaded.file_id),
       ]);
-      setJob(newJob);
+      setJob(extraction.job);
+      setExtractedRecord(extraction.record);
       setParsedDocument(parsed);
       setUploadState("uploaded");
     } catch (error) {
@@ -154,8 +160,8 @@ export default function App() {
           </section>
 
           <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <ExtractionPreview parsedDocument={parsedDocument} />
-            <ReportsPanel uploadedFile={uploadedFile} parsedDocument={parsedDocument} />
+            <ExtractionPreview parsedDocument={parsedDocument} extractedRecord={extractedRecord} />
+            <ReportsPanel uploadedFile={uploadedFile} extractedRecord={extractedRecord} />
           </section>
         </main>
       </div>
@@ -372,8 +378,12 @@ function StatusPanel({
   const steps = [
     { label: "API connection", done: health?.status === "ok", detail: healthError ?? "FastAPI health check" },
     { label: "File stored", done: Boolean(uploadedFile), detail: uploadedFile?.original_filename ?? "Waiting" },
-    { label: "Job created", done: Boolean(job), detail: job?.status ?? "Waiting" },
-    { label: "Ready for extraction", done: Boolean(uploadedFile && job), detail: "Phase 4 connects LLM output" },
+    { label: "Extraction job", done: Boolean(job), detail: job?.status ?? "Waiting" },
+    {
+      label: "Structured record",
+      done: Boolean(uploadedFile && job?.status === "completed"),
+      detail: "Schema-validated and persisted",
+    },
   ];
 
   return (
@@ -425,7 +435,13 @@ function StatusPanel({
   );
 }
 
-function ExtractionPreview({ parsedDocument }: { parsedDocument: ParsedDocumentResponse | null }) {
+function ExtractionPreview({
+  parsedDocument,
+  extractedRecord,
+}: {
+  parsedDocument: ParsedDocumentResponse | null;
+  extractedRecord: ExtractedRecordResponse | null;
+}) {
   return (
     <section className="rounded-xl border border-cloud-200 bg-white p-5 shadow-soft sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -449,10 +465,12 @@ function ExtractionPreview({ parsedDocument }: { parsedDocument: ParsedDocumentR
           <div className="rounded-lg border border-cloud-200 bg-cloud-50 p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-900">
               <FileJson2 className="h-4 w-4 text-brand-600" />
-              Parsed text sample
+              Structured extraction
             </div>
             <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-4 text-sm leading-6 text-ink-700 shadow-line">
-              {parsedDocument.text || "No text extracted."}
+              {extractedRecord
+                ? JSON.stringify(extractedRecord.normalized_payload, null, 2)
+                : parsedDocument.text || "No text extracted."}
             </pre>
           </div>
         </div>
@@ -474,10 +492,10 @@ function InfoTile({ label, value }: { label: string; value: string }) {
 
 function ReportsPanel({
   uploadedFile,
-  parsedDocument,
+  extractedRecord,
 }: {
   uploadedFile: UploadedFileResponse | null;
-  parsedDocument: ParsedDocumentResponse | null;
+  extractedRecord: ExtractedRecordResponse | null;
 }) {
   const rows = [
     {
@@ -487,7 +505,7 @@ function ReportsPanel({
     },
     {
       name: "Validation exceptions",
-      status: parsedDocument ? "Parser data ready" : "Waiting",
+      status: extractedRecord ? "Extraction ready" : "Waiting",
       icon: ShieldCheck,
     },
     {
@@ -524,8 +542,7 @@ function ReportsPanel({
       <div className="mt-5 rounded-lg bg-gradient-to-br from-ink-950 to-brand-700 p-4 text-white">
         <p className="text-sm font-semibold">Next milestone</p>
         <p className="mt-2 text-sm leading-6 text-white/75">
-          Phase 4 adds structured LLM extraction so these report modules can shift from preview state
-          into real AI-enriched outputs.
+          Phase 5 adds validation rules so extracted records can produce exception reports and review queues.
         </p>
       </div>
     </section>
