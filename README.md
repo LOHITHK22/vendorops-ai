@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 6 is complete:
+Phase 7 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -63,6 +63,10 @@ Phase 6 is complete:
 - Pipeline orchestration service added.
 - `POST /v1/jobs/{job_id}/run` added for running queued pipeline jobs.
 - File extraction and explicit job execution now share the same orchestration code path.
+- JSON and CSV report generation added.
+- Generated report metadata is persisted in `generated_reports`.
+- Report download endpoint added.
+- Dashboard report cards can generate and download real reports.
 
 ## Local Setup
 
@@ -119,6 +123,10 @@ GET  /v1/records
 GET  /v1/records/{record_id}
 GET  /v1/validation-errors
 GET  /v1/validation-errors/records/{record_id}
+POST /v1/reports
+GET  /v1/reports
+GET  /v1/reports/{report_id}
+GET  /v1/reports/{report_id}/download
 ```
 
 Planned endpoints:
@@ -267,6 +275,22 @@ Run a queued job:
 curl -X POST http://127.0.0.1:8000/v1/jobs/<JOB_ID>/run
 ```
 
+Generate a JSON summary report:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/reports \
+  -H "Content-Type: application/json" \
+  -d '{"report_type":"summary","format":"json"}'
+```
+
+Generate a CSV records report:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/reports \
+  -H "Content-Type: application/json" \
+  -d '{"report_type":"records","format":"csv"}'
+```
+
 ## Planned Architecture
 
 ```text
@@ -380,6 +404,22 @@ The orchestration service is used by both:
 - `POST /v1/jobs/{job_id}/run`
 
 This keeps route handlers thin and makes the pipeline easier to test, reuse, and eventually run from a background worker.
+
+## Reporting
+
+Phase 7 generates business-friendly outputs from extracted records and validation findings.
+
+Supported report types:
+
+- `summary`: totals by vendor, counts by record type, validation finding summaries, and record previews.
+- `records`: flat extracted-record export.
+
+Supported formats:
+
+- `json`
+- `csv`
+
+Generated reports are written to `REPORTS_DIR` and tracked in `generated_reports`.
 
 ## Testing
 

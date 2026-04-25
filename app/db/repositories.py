@@ -3,7 +3,14 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditLog, ExtractedRecord, ProcessingJob, UploadedFile, ValidationError
+from app.db.models import (
+    AuditLog,
+    ExtractedRecord,
+    GeneratedReport,
+    ProcessingJob,
+    UploadedFile,
+    ValidationError,
+)
 from app.extraction.schemas import ExtractedBusinessRecord
 from app.validation.rules import ValidationFinding
 
@@ -203,6 +210,48 @@ async def list_validation_errors_for_record(
         .order_by(ValidationError.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def create_generated_report(
+    session: AsyncSession,
+    *,
+    report_type: str,
+    parameters: dict,
+    storage_path: str,
+    status: str = "created",
+) -> GeneratedReport:
+    report = GeneratedReport(
+        report_type=report_type,
+        status=status,
+        parameters=parameters,
+        storage_path=storage_path,
+    )
+    session.add(report)
+    await create_audit_log(
+        session,
+        action="report.generated",
+        entity_type="generated_report",
+        entity_id=report.id,
+        details={
+            "report_type": report_type,
+            "storage_path": storage_path,
+            "parameters": parameters,
+        },
+    )
+    await session.commit()
+    await session.refresh(report)
+    return report
+
+
+async def list_generated_reports(session: AsyncSession) -> list[GeneratedReport]:
+    result = await session.execute(
+        select(GeneratedReport).order_by(GeneratedReport.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_generated_report(session: AsyncSession, report_id: UUID) -> GeneratedReport | None:
+    return await session.get(GeneratedReport, str(report_id))
 
 
 async def create_audit_log(

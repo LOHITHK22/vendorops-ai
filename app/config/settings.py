@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./vendorops.db"
     local_storage_dir: Path = Field(default=Path("./storage"))
+    reports_dir: Path = Field(default=Path("./reports_out"))
 
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"

@@ -23,13 +23,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   API_BASE_URL,
+  type GeneratedReportResponse,
   type HealthResponse,
   type ExtractedRecordResponse,
   type ParsedDocumentResponse,
   type ProcessingJobResponse,
   type UploadedFileResponse,
   type ValidationErrorResponse,
+  createReport,
   extractFile,
+  getReportDownloadUrl,
   getHealth,
   parseFile,
   uploadFile,
@@ -66,6 +69,7 @@ export default function App() {
   const [parsedDocument, setParsedDocument] = useState<ParsedDocumentResponse | null>(null);
   const [extractedRecord, setExtractedRecord] = useState<ExtractedRecordResponse | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrorResponse[]>([]);
+  const [generatedReports, setGeneratedReports] = useState<GeneratedReportResponse[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -169,6 +173,10 @@ export default function App() {
               uploadedFile={uploadedFile}
               extractedRecord={extractedRecord}
               validationErrors={validationErrors}
+              generatedReports={generatedReports}
+              onReportGenerated={(report) =>
+                setGeneratedReports((currentReports) => [report, ...currentReports])
+              }
             />
           </section>
         </main>
@@ -502,11 +510,31 @@ function ReportsPanel({
   uploadedFile,
   extractedRecord,
   validationErrors,
+  generatedReports,
+  onReportGenerated,
 }: {
   uploadedFile: UploadedFileResponse | null;
   extractedRecord: ExtractedRecordResponse | null;
   validationErrors: ValidationErrorResponse[];
+  generatedReports: GeneratedReportResponse[];
+  onReportGenerated: (report: GeneratedReportResponse) => void;
 }) {
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  async function handleCreateReport(reportType: "summary" | "records", format: "json" | "csv") {
+    setIsGenerating(true);
+    setReportError(null);
+    try {
+      const report = await createReport(reportType, format);
+      onReportGenerated(report);
+    } catch (error) {
+      setReportError(error instanceof Error ? error.message : "Report generation failed.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
   const rows = [
     {
       name: "Vendor spend summary",
@@ -549,6 +577,29 @@ function ReportsPanel({
         ))}
       </div>
 
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        <button
+          className="rounded-lg bg-ink-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-ink-900 disabled:opacity-60"
+          disabled={!extractedRecord || isGenerating}
+          onClick={() => void handleCreateReport("summary", "json")}
+        >
+          Generate JSON
+        </button>
+        <button
+          className="rounded-lg border border-cloud-200 bg-white px-3 py-2 text-sm font-semibold text-ink-900 transition hover:bg-cloud-50 disabled:opacity-60"
+          disabled={!extractedRecord || isGenerating}
+          onClick={() => void handleCreateReport("records", "csv")}
+        >
+          Generate CSV
+        </button>
+      </div>
+
+      {reportError ? (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {reportError}
+        </div>
+      ) : null}
+
       {extractedRecord ? (
         <div className="mt-5 rounded-lg border border-cloud-200 bg-cloud-50 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -581,11 +632,31 @@ function ReportsPanel({
         </div>
       ) : null}
 
+      {generatedReports.length > 0 ? (
+        <div className="mt-5 space-y-2">
+          <p className="text-sm font-semibold text-ink-900">Generated reports</p>
+          {generatedReports.slice(0, 3).map((report) => (
+            <a
+              key={report.report_id}
+              className="flex items-center justify-between rounded-lg border border-cloud-200 bg-cloud-50 px-3 py-2 text-sm transition hover:bg-white"
+              href={getReportDownloadUrl(report.report_id)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <span className="font-medium text-ink-700">
+                {report.report_type} · {String(report.parameters.format).toUpperCase()}
+              </span>
+              <span className="text-xs font-semibold text-brand-700">Download</span>
+            </a>
+          ))}
+        </div>
+      ) : null}
+
       <div className="mt-5 rounded-lg bg-gradient-to-br from-ink-950 to-brand-700 p-4 text-white">
         <p className="text-sm font-semibold">Next milestone</p>
         <p className="mt-2 text-sm leading-6 text-white/75">
-          Phase 6 connects this into a full orchestration path for ingestion, parsing, extraction,
-          validation, and storage.
+          Phase 8 adds structured logging, retry handling, richer error tracking, and observability
+          views around these report and pipeline runs.
         </p>
       </div>
     </section>

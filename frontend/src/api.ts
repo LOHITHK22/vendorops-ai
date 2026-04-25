@@ -67,6 +67,15 @@ export type ValidationErrorResponse = {
   created_at: string;
 };
 
+export type GeneratedReportResponse = {
+  report_id: string;
+  report_type: string;
+  status: string;
+  parameters: Record<string, unknown>;
+  storage_path?: string | null;
+  created_at: string;
+};
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ detail: response.statusText }));
@@ -110,4 +119,20 @@ export async function extractFile(fileId: string): Promise<ExtractionRunResponse
     method: "POST",
   });
   return parseJsonResponse<ExtractionRunResponse>(response);
+}
+
+export async function createReport(
+  reportType: "summary" | "records",
+  format: "json" | "csv",
+): Promise<GeneratedReportResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/reports`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ report_type: reportType, format }),
+  });
+  return parseJsonResponse<GeneratedReportResponse>(response);
+}
+
+export function getReportDownloadUrl(reportId: string): string {
+  return `${API_BASE_URL}/v1/reports/${reportId}/download`;
 }

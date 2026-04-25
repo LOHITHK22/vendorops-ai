@@ -100,3 +100,17 @@ class ExtractionRunResponse(BaseModel):
     job: ProcessingJobResponse
     record: ExtractedRecordResponse
     validation_errors: list[ValidationErrorResponse]
+
+
+class CreateReportRequest(BaseModel):
+    report_type: str = Field(default="summary", pattern="^(summary|records)$")
+    format: str = Field(default="json", pattern="^(json|csv)$")
+
+
+class GeneratedReportResponse(BaseModel):
+    report_id: UUID
+    report_type: str
+    status: str
+    parameters: dict
+    storage_path: str | None = None
+    created_at: datetime
