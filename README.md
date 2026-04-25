@@ -143,7 +143,7 @@ GET  /v1/reports/{report_id}/download
 First change into the project folder:
 
 ```powershell
-cd C:\Users\Princ\Documents\Codex\2026-04-24\act-as-a-senior-data-engineering
+cd "C:\Users\Princ\Documents\Codex\2026-04-24\VendorOps AI"
 ```
 
 ```bash
@@ -175,7 +175,7 @@ The premium dashboard UI lives in `frontend/` and uses React, TypeScript, Vite, 
 Install frontend dependencies:
 
 ```powershell
-cd C:\Users\Princ\Documents\Codex\2026-04-24\act-as-a-senior-data-engineering\frontend
+cd "C:\Users\Princ\Documents\Codex\2026-04-24\VendorOps AI\frontend"
 npm install
 ```
 
