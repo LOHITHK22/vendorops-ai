@@ -113,8 +113,26 @@ GET  /v1/reports/{report_id}/download
 
 ## Run The API
 
+First change into the project folder:
+
+```powershell
+cd C:\Users\Princ\Documents\Codex\2026-04-24\act-as-a-senior-data-engineering
+```
+
 ```bash
 uvicorn app.api.main:app --reload
+```
+
+On Windows PowerShell, you can also use the helper script:
+
+```powershell
+.\scripts\run_api.ps1
+```
+
+If your shell is not activated, run through the project virtual environment directly:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.api.main:app --reload
 ```
 
 Open:
