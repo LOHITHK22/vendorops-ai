@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 9 is complete:
+Phase 10 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -78,6 +78,10 @@ Phase 9 is complete:
 - Docker Compose stack added with persistent SQLite, upload, and report volumes.
 - Nginx proxy config added for same-origin `/health` and `/v1` API calls.
 - Deployment guide added in `deploy/README.md`.
+- Shared pytest fixture added for isolated API/database test contexts.
+- End-to-end API integration tests added for upload, parse, extraction, records, reports, audit logs, and error contracts.
+- Retry utility tests added for recovery and exhausted attempts.
+- Test runner script added for backend linting, backend tests, and frontend build validation.
 
 ## Local Setup
 
@@ -479,6 +483,20 @@ Run the current test suite:
 
 ```bash
 pytest
+```
+
+On Windows PowerShell, run the full local validation suite:
+
+```powershell
+.\scripts\run_tests.ps1
+```
+
+That script runs:
+
+```text
+ruff check .
+pytest
+npm run build
 ```
 
 ## Resume Positioning
