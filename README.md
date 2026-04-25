@@ -141,6 +141,54 @@ Open:
 http://127.0.0.1:8000/docs
 ```
 
+## Run The Frontend
+
+The premium dashboard UI lives in `frontend/` and uses React, TypeScript, Vite, Tailwind CSS, and Lucide icons.
+
+Install frontend dependencies:
+
+```powershell
+cd C:\Users\Princ\Documents\Codex\2026-04-24\act-as-a-senior-data-engineering\frontend
+npm install
+```
+
+Optional frontend environment file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Start the frontend:
+
+```powershell
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+You can also start it from the project root:
+
+```powershell
+.\scripts\run_frontend.ps1
+```
+
+To launch backend and frontend in two PowerShell windows:
+
+```powershell
+.\scripts\run_all.ps1
+```
+
+Build the frontend:
+
+```powershell
+cd frontend
+npm run build
+```
+
 ## API Examples
 
 Health check:

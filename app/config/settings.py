@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,9 +26,16 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4.1-mini"
 
     log_level: str = "INFO"
+    cors_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

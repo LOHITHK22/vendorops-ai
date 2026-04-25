@@ -1,0 +1,76 @@
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+
+export type HealthResponse = {
+  status: string;
+  app_name: string;
+  environment: string;
+  timestamp: string;
+};
+
+export type UploadedFileResponse = {
+  file_id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  sha256_hash: string;
+  storage_path: string;
+  created_at: string;
+};
+
+export type ProcessingJobResponse = {
+  job_id: string;
+  file_id: string;
+  pipeline: string;
+  status: "queued" | "running" | "completed" | "failed";
+  created_at: string;
+  updated_at: string;
+  error_message?: string | null;
+};
+
+export type ParsedDocumentResponse = {
+  source_path: string;
+  file_type: string;
+  text: string;
+  metadata: Record<string, unknown>;
+  pages: Array<{ page_number: number; text: string }>;
+  tables: Array<{ name: string; columns: string[]; rows: Array<Record<string, unknown>> }>;
+};
+
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(payload.detail ?? "Request failed");
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+  const response = await fetch(`${API_BASE_URL}/health`);
+  return parseJsonResponse<HealthResponse>(response);
+}
+
+export async function uploadFile(file: File): Promise<UploadedFileResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE_URL}/v1/files`, {
+    method: "POST",
+    body: formData,
+  });
+  return parseJsonResponse<UploadedFileResponse>(response);
+}
+
+export async function createJob(fileId: string): Promise<ProcessingJobResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/jobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_id: fileId, pipeline: "document_extraction" }),
+  });
+  return parseJsonResponse<ProcessingJobResponse>(response);
+}
+
+export async function parseFile(fileId: string): Promise<ParsedDocumentResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/files/${fileId}/parsed`);
+  return parseJsonResponse<ParsedDocumentResponse>(response);
+}
