@@ -4,9 +4,13 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import CreateJobRequest, ProcessingJobResponse
+from app.api.routes.records import to_record_response
+from app.api.routes.validation import to_validation_error_response
+from app.api.schemas import CreateJobRequest, ExtractionRunResponse, ProcessingJobResponse
+from app.config.settings import Settings, get_settings
 from app.db.repositories import create_processing_job, get_processing_job, get_uploaded_file
 from app.db.session import get_db_session
+from app.pipeline.document_pipeline import PipelineError, PipelineInputError, run_document_pipeline
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -65,4 +69,61 @@ async def get_job(
         created_at=job.created_at,
         updated_at=job.updated_at,
         error_message=job.error_message,
+    )
+
+
+@router.post("/{job_id}/run", response_model=ExtractionRunResponse)
+async def run_job(
+    job_id: UUID,
+    settings: Annotated[Settings, Depends(get_settings)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ExtractionRunResponse:
+    job = await get_processing_job(session, job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job '{job_id}' was not found.",
+        )
+
+    if job.status == "running":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Job '{job_id}' is already running.",
+        )
+    if job.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Job '{job_id}' has already completed.",
+        )
+
+    try:
+        pipeline_result = await run_document_pipeline(
+            session=session,
+            settings=settings,
+            file_id=UUID(job.file_id),
+            job=job,
+        )
+    except PipelineInputError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except PipelineError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    return ExtractionRunResponse(
+        job=ProcessingJobResponse(
+            job_id=UUID(pipeline_result.job.id),
+            file_id=UUID(pipeline_result.job.file_id),
+            pipeline=pipeline_result.job.pipeline,
+            status=pipeline_result.job.status,
+            created_at=pipeline_result.job.created_at,
+            updated_at=pipeline_result.job.updated_at,
+            error_message=pipeline_result.job.error_message,
+        ),
+        record=to_record_response(pipeline_result.record),
+        validation_errors=[
+            to_validation_error_response(validation_error)
+            for validation_error in pipeline_result.validation_errors
+        ],
     )

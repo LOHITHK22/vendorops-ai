@@ -1,5 +1,5 @@
 from typing import Annotated
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,19 +14,14 @@ from app.api.schemas import (
 )
 from app.config.settings import Settings, get_settings
 from app.db.repositories import (
-    create_extracted_record,
-    create_processing_job,
     create_uploaded_file,
-    create_validation_errors,
     get_uploaded_file,
-    update_processing_job_status,
 )
 from app.db.session import get_db_session
-from app.extraction.extractor import ExtractionError, get_extractor
 from app.ingestion.storage import store_upload
 from app.parsers.dispatcher import parse_file
 from app.parsers.models import ParserError
-from app.validation.rules import validate_extracted_record
+from app.pipeline.document_pipeline import PipelineError, PipelineInputError, run_document_pipeline
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -97,46 +92,15 @@ async def extract_uploaded_file(
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ExtractionRunResponse:
-    uploaded_file = await get_uploaded_file(session, file_id)
-    if uploaded_file is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"File '{file_id}' was not found.",
-        )
-
-    job = await create_processing_job(
-        session,
-        job_id=uuid4(),
-        file_id=file_id,
-        pipeline="document_extraction",
-    )
-    await update_processing_job_status(session, job=job, status="running")
-
     try:
-        parsed_document = parse_file(uploaded_file.storage_path)
-        extraction_result = await get_extractor(settings).extract(parsed_document)
-        record = await create_extracted_record(
-            session,
+        pipeline_result = await run_document_pipeline(
+            session=session,
+            settings=settings,
             file_id=file_id,
-            job_id=UUID(job.id),
-            extracted=extraction_result.record,
-            raw_payload=extraction_result.model_dump(mode="json"),
         )
-        findings = validate_extracted_record(extraction_result.record)
-        validation_errors = await create_validation_errors(
-            session,
-            record_id=UUID(record.id),
-            job_id=UUID(job.id),
-            findings=findings,
-        )
-        job = await update_processing_job_status(session, job=job, status="completed")
-    except (ParserError, ExtractionError, ValueError) as exc:
-        job = await update_processing_job_status(
-            session,
-            job=job,
-            status="failed",
-            error_message=str(exc),
-        )
+    except PipelineInputError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PipelineError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
@@ -144,17 +108,17 @@ async def extract_uploaded_file(
 
     return ExtractionRunResponse(
         job=ProcessingJobResponse(
-            job_id=UUID(job.id),
-            file_id=UUID(job.file_id),
-            pipeline=job.pipeline,
-            status=job.status,
-            created_at=job.created_at,
-            updated_at=job.updated_at,
-            error_message=job.error_message,
+            job_id=UUID(pipeline_result.job.id),
+            file_id=UUID(pipeline_result.job.file_id),
+            pipeline=pipeline_result.job.pipeline,
+            status=pipeline_result.job.status,
+            created_at=pipeline_result.job.created_at,
+            updated_at=pipeline_result.job.updated_at,
+            error_message=pipeline_result.job.error_message,
         ),
-        record=to_record_response(record),
+        record=to_record_response(pipeline_result.record),
         validation_errors=[
             to_validation_error_response(validation_error)
-            for validation_error in validation_errors
+            for validation_error in pipeline_result.validation_errors
         ],
     )

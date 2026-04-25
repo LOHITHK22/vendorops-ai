@@ -31,7 +31,7 @@ The initial MVP uses Python, FastAPI, SQLAlchemy, SQLite, Pydantic, pytest, and 
 
 ## Current Status
 
-Phase 5 is complete:
+Phase 6 is complete:
 
 - Repository structure created.
 - Python dependencies defined in `pyproject.toml`.
@@ -60,6 +60,9 @@ Phase 5 is complete:
 - Validation findings are persisted in `validation_errors`.
 - Validation errors API added.
 - The dashboard now shows pass/needs-review validation state and finding details.
+- Pipeline orchestration service added.
+- `POST /v1/jobs/{job_id}/run` added for running queued pipeline jobs.
+- File extraction and explicit job execution now share the same orchestration code path.
 
 ## Local Setup
 
@@ -111,6 +114,7 @@ GET  /v1/files/{file_id}/parsed
 POST /v1/files/{file_id}/extract
 POST /v1/jobs
 GET  /v1/jobs/{job_id}
+POST /v1/jobs/{job_id}/run
 GET  /v1/records
 GET  /v1/records/{record_id}
 GET  /v1/validation-errors
@@ -257,6 +261,12 @@ List validation findings:
 curl http://127.0.0.1:8000/v1/validation-errors
 ```
 
+Run a queued job:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/jobs/<JOB_ID>/run
+```
+
 ## Planned Architecture
 
 ```text
@@ -348,6 +358,28 @@ Current checks:
 - Missing source evidence for important extracted fields.
 
 Validation findings are saved to `validation_errors` and returned from the extraction endpoint.
+
+## Pipeline Orchestration
+
+Phase 6 moves the core workflow into a reusable pipeline service:
+
+```text
+uploaded file
+  -> parser dispatcher
+  -> structured extractor
+  -> validation rule engine
+  -> extracted record persistence
+  -> validation error persistence
+  -> job status updates
+  -> audit events
+```
+
+The orchestration service is used by both:
+
+- `POST /v1/files/{file_id}/extract`
+- `POST /v1/jobs/{job_id}/run`
+
+This keeps route handlers thin and makes the pipeline easier to test, reuse, and eventually run from a background worker.
 
 ## Testing
 
