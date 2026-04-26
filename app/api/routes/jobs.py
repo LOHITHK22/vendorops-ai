@@ -4,9 +4,11 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_optional_context, tenant_ids
 from app.api.routes.records import to_record_response
 from app.api.routes.validation import to_validation_error_response
 from app.api.schemas import CreateJobRequest, ExtractionRunResponse, ProcessingJobResponse
+from app.auth.service import AuthContext
 from app.config.settings import Settings, get_settings
 from app.db.repositories import create_processing_job, get_processing_job, get_uploaded_file
 from app.db.session import get_db_session
@@ -23,8 +25,15 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 async def create_job(
     request: CreateJobRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> ProcessingJobResponse:
-    file_record = await get_uploaded_file(session, request.file_id)
+    organization_id, workspace_id = tenant_ids(context)
+    file_record = await get_uploaded_file(
+        session,
+        request.file_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     if file_record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -36,6 +45,8 @@ async def create_job(
         job_id=uuid4(),
         file_id=request.file_id,
         pipeline=request.pipeline,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
     )
 
     return ProcessingJobResponse(
@@ -53,8 +64,15 @@ async def create_job(
 async def get_job(
     job_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> ProcessingJobResponse:
-    job = await get_processing_job(session, job_id)
+    organization_id, workspace_id = tenant_ids(context)
+    job = await get_processing_job(
+        session,
+        job_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     if job is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -77,8 +95,15 @@ async def run_job(
     job_id: UUID,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> ExtractionRunResponse:
-    job = await get_processing_job(session, job_id)
+    organization_id, workspace_id = tenant_ids(context)
+    job = await get_processing_job(
+        session,
+        job_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     if job is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -101,6 +126,8 @@ async def run_job(
             session=session,
             settings=settings,
             file_id=UUID(job.file_id),
+            organization_id=organization_id,
+            workspace_id=workspace_id,
             job=job,
         )
     except PipelineInputError as exc:

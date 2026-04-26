@@ -20,6 +20,8 @@ class UploadedFile(Base):
     __tablename__ = "uploaded_files"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), index=True)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(255), nullable=False)
     file_type: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -171,6 +173,8 @@ class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), index=True)
     file_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("uploaded_files.id", ondelete="CASCADE"),
@@ -198,6 +202,8 @@ class ExtractedRecord(Base):
     __tablename__ = "extracted_records"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), index=True)
     file_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("uploaded_files.id", ondelete="CASCADE"),
@@ -225,6 +231,8 @@ class ValidationError(Base):
     __tablename__ = "validation_errors"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), index=True)
     record_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("extracted_records.id", ondelete="CASCADE"),
@@ -246,6 +254,8 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), index=True)
     actor: Mapped[str] = mapped_column(String(100), nullable=False, default="system")
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -258,6 +268,8 @@ class ExtractionErrorLog(Base):
     __tablename__ = "extraction_errors"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), index=True)
     job_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("processing_jobs.id", ondelete="SET NULL"),
@@ -281,6 +293,8 @@ class GeneratedReport(Base):
     __tablename__ = "generated_reports"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    organization_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), index=True)
     report_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="created")
     parameters: Mapped[dict] = mapped_column(SQLAlchemyJSON, nullable=False, default=dict)
@@ -292,3 +306,21 @@ Index("idx_jobs_file_pipeline", ProcessingJob.file_id, ProcessingJob.pipeline)
 Index("idx_records_vendor_type", ExtractedRecord.vendor_name, ExtractedRecord.record_type)
 Index("idx_workspace_org_slug", Workspace.organization_id, Workspace.slug)
 Index("idx_membership_user_workspace", Membership.user_id, Membership.workspace_id)
+Index(
+    "idx_files_tenant_created",
+    UploadedFile.organization_id,
+    UploadedFile.workspace_id,
+    UploadedFile.created_at,
+)
+Index(
+    "idx_jobs_tenant_status",
+    ProcessingJob.organization_id,
+    ProcessingJob.workspace_id,
+    ProcessingJob.status,
+)
+Index(
+    "idx_records_tenant_created",
+    ExtractedRecord.organization_id,
+    ExtractedRecord.workspace_id,
+    ExtractedRecord.created_at,
+)

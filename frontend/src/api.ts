@@ -193,6 +193,18 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function authHeaders(): HeadersInit {
+  const token = localStorage.getItem("vendorops_access_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function jsonHeaders(): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    ...authHeaders(),
+  };
+}
+
 export async function getHealth(): Promise<HealthResponse> {
   const response = await fetch(`${API_BASE_URL}/health`);
   return parseJsonResponse<HealthResponse>(response);
@@ -204,6 +216,7 @@ export async function uploadFile(file: File): Promise<UploadedFileResponse> {
 
   const response = await fetch(`${API_BASE_URL}/v1/files`, {
     method: "POST",
+    headers: authHeaders(),
     body: formData,
   });
   return parseJsonResponse<UploadedFileResponse>(response);
@@ -212,26 +225,31 @@ export async function uploadFile(file: File): Promise<UploadedFileResponse> {
 export async function createJob(fileId: string): Promise<ProcessingJobResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/jobs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify({ file_id: fileId, pipeline: "document_extraction" }),
   });
   return parseJsonResponse<ProcessingJobResponse>(response);
 }
 
 export async function parseFile(fileId: string): Promise<ParsedDocumentResponse> {
-  const response = await fetch(`${API_BASE_URL}/v1/files/${fileId}/parsed`);
+  const response = await fetch(`${API_BASE_URL}/v1/files/${fileId}/parsed`, {
+    headers: authHeaders(),
+  });
   return parseJsonResponse<ParsedDocumentResponse>(response);
 }
 
 export async function extractFile(fileId: string): Promise<ExtractionRunResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/files/${fileId}/extract`, {
     method: "POST",
+    headers: authHeaders(),
   });
   return parseJsonResponse<ExtractionRunResponse>(response);
 }
 
 export async function getRecords(): Promise<ExtractedRecordResponse[]> {
-  const response = await fetch(`${API_BASE_URL}/v1/records`);
+  const response = await fetch(`${API_BASE_URL}/v1/records`, {
+    headers: authHeaders(),
+  });
   return parseJsonResponse<ExtractedRecordResponse[]>(response);
 }
 
@@ -241,24 +259,30 @@ export async function createReport(
 ): Promise<GeneratedReportResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/reports`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonHeaders(),
     body: JSON.stringify({ report_type: reportType, format }),
   });
   return parseJsonResponse<GeneratedReportResponse>(response);
 }
 
 export async function getReports(): Promise<GeneratedReportResponse[]> {
-  const response = await fetch(`${API_BASE_URL}/v1/reports`);
+  const response = await fetch(`${API_BASE_URL}/v1/reports`, {
+    headers: authHeaders(),
+  });
   return parseJsonResponse<GeneratedReportResponse[]>(response);
 }
 
 export async function getSummaryReport(reportId: string): Promise<SummaryReportResponse> {
-  const response = await fetch(getReportDownloadUrl(reportId));
+  const response = await fetch(getReportDownloadUrl(reportId), {
+    headers: authHeaders(),
+  });
   return parseJsonResponse<SummaryReportResponse>(response);
 }
 
 export async function getAnalyticsDashboard(): Promise<AnalyticsDashboardResponse> {
-  const response = await fetch(`${API_BASE_URL}/v1/analytics/dashboard`);
+  const response = await fetch(`${API_BASE_URL}/v1/analytics/dashboard`, {
+    headers: authHeaders(),
+  });
   return parseJsonResponse<AnalyticsDashboardResponse>(response);
 }
 
@@ -279,12 +303,16 @@ export async function getMe(accessToken: string): Promise<AuthUserResponse> {
 }
 
 export async function getAuditLogs(limit = 8): Promise<AuditLogResponse[]> {
-  const response = await fetch(`${API_BASE_URL}/v1/audit-logs?limit=${limit}`);
+  const response = await fetch(`${API_BASE_URL}/v1/audit-logs?limit=${limit}`, {
+    headers: authHeaders(),
+  });
   return parseJsonResponse<AuditLogResponse[]>(response);
 }
 
 export async function getExtractionErrors(limit = 8): Promise<ExtractionErrorResponse[]> {
-  const response = await fetch(`${API_BASE_URL}/v1/extraction-errors?limit=${limit}`);
+  const response = await fetch(`${API_BASE_URL}/v1/extraction-errors?limit=${limit}`, {
+    headers: authHeaders(),
+  });
   return parseJsonResponse<ExtractionErrorResponse[]>(response);
 }
 

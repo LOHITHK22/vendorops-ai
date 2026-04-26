@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_optional_context, tenant_ids
 from app.api.schemas import CreateReportRequest, GeneratedReportResponse
+from app.auth.service import AuthContext
 from app.config.settings import Settings, get_settings
 from app.db.repositories import (
     create_generated_report,
@@ -38,9 +40,19 @@ async def create_report(
     request: CreateReportRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> GeneratedReportResponse:
-    records = await list_extracted_records(session)
-    validation_errors = await list_validation_errors(session)
+    organization_id, workspace_id = tenant_ids(context)
+    records = await list_extracted_records(
+        session,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
+    validation_errors = await list_validation_errors(
+        session,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
 
     if request.report_type == "summary":
         payload = build_summary_report(records, validation_errors)
@@ -58,6 +70,8 @@ async def create_report(
     report = await create_generated_report(
         session,
         report_type=request.report_type,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
         parameters={"format": request.format},
         storage_path=str(storage_path),
     )
@@ -67,8 +81,14 @@ async def create_report(
 @router.get("", response_model=list[GeneratedReportResponse])
 async def get_reports(
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> list[GeneratedReportResponse]:
-    reports = await list_generated_reports(session)
+    organization_id, workspace_id = tenant_ids(context)
+    reports = await list_generated_reports(
+        session,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     return [to_report_response(report) for report in reports]
 
 
@@ -76,8 +96,15 @@ async def get_reports(
 async def get_report(
     report_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> GeneratedReportResponse:
-    report = await get_generated_report(session, report_id)
+    organization_id, workspace_id = tenant_ids(context)
+    report = await get_generated_report(
+        session,
+        report_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     if report is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -90,8 +117,15 @@ async def get_report(
 async def download_report(
     report_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> FileResponse:
-    report = await get_generated_report(session, report_id)
+    organization_id, workspace_id = tenant_ids(context)
+    report = await get_generated_report(
+        session,
+        report_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     if report is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

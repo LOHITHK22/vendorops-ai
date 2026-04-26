@@ -44,18 +44,39 @@ async def run_document_pipeline(
     session: AsyncSession,
     settings: Settings,
     file_id: UUID,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
     job: ProcessingJob | None = None,
 ) -> DocumentPipelineResult:
-    uploaded_file = await get_uploaded_file(session, file_id)
+    if job is not None:
+        organization_id = organization_id or (
+            UUID(job.organization_id) if job.organization_id else None
+        )
+        workspace_id = workspace_id or (UUID(job.workspace_id) if job.workspace_id else None)
+
+    uploaded_file = await get_uploaded_file(
+        session,
+        file_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     if uploaded_file is None:
         raise PipelineInputError(f"File '{file_id}' was not found.")
 
     if job is None:
+        organization_id = organization_id or (
+            UUID(uploaded_file.organization_id) if uploaded_file.organization_id else None
+        )
+        workspace_id = workspace_id or (
+            UUID(uploaded_file.workspace_id) if uploaded_file.workspace_id else None
+        )
         job = await create_processing_job(
             session,
             job_id=uuid4(),
             file_id=file_id,
             pipeline="document_extraction",
+            organization_id=organization_id,
+            workspace_id=workspace_id,
         )
     elif job.pipeline != "document_extraction":
         raise PipelineInputError(f"Unsupported pipeline '{job.pipeline}'.")
@@ -105,6 +126,8 @@ async def run_document_pipeline(
                 message=str(exc),
                 retryable=True,
                 attempt=attempt,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
                 job_id=job_id,
                 file_id=file_id,
                 details={
@@ -138,6 +161,8 @@ async def run_document_pipeline(
             session,
             file_id=file_id,
             job_id=job_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
             extracted=extraction_result.record,
             raw_payload=extraction_result.model_dump(mode="json"),
         )
@@ -146,6 +171,8 @@ async def run_document_pipeline(
             session,
             record_id=UUID(record.id),
             job_id=job_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
             findings=findings,
         )
         log_event(
@@ -181,6 +208,8 @@ async def run_document_pipeline(
                 if isinstance(exc, RetryExhaustedError)
                 else 1
             ),
+            organization_id=organization_id,
+            workspace_id=workspace_id,
             job_id=job_id,
             file_id=file_id,
             details={"pipeline": job.pipeline},

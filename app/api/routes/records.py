@@ -4,7 +4,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_optional_context, tenant_ids
 from app.api.schemas import ExtractedRecordResponse
+from app.auth.service import AuthContext
 from app.db.repositories import get_extracted_record, list_extracted_records
 from app.db.session import get_db_session
 
@@ -29,8 +31,14 @@ def to_record_response(record) -> ExtractedRecordResponse:
 @router.get("", response_model=list[ExtractedRecordResponse])
 async def list_records(
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> list[ExtractedRecordResponse]:
-    records = await list_extracted_records(session)
+    organization_id, workspace_id = tenant_ids(context)
+    records = await list_extracted_records(
+        session,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     return [to_record_response(record) for record in records]
 
 
@@ -38,8 +46,15 @@ async def list_records(
 async def get_record(
     record_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> ExtractedRecordResponse:
-    record = await get_extracted_record(session, record_id)
+    organization_id, workspace_id = tenant_ids(context)
+    record = await get_extracted_record(
+        session,
+        record_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

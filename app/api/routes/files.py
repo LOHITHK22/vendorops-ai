@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_optional_context, tenant_ids
 from app.api.routes.records import to_record_response
 from app.api.routes.validation import to_validation_error_response
 from app.api.schemas import (
@@ -12,6 +13,7 @@ from app.api.schemas import (
     ProcessingJobResponse,
     UploadedFileResponse,
 )
+from app.auth.service import AuthContext
 from app.config.settings import Settings, get_settings
 from app.db.repositories import (
     create_uploaded_file,
@@ -35,15 +37,19 @@ async def upload_file(
     file: Annotated[UploadFile, File(...)],
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> UploadedFileResponse:
     try:
         stored_upload = await store_upload(file, settings.local_storage_dir)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    organization_id, workspace_id = tenant_ids(context)
     uploaded_file = await create_uploaded_file(
         session,
         file_id=UUID(stored_upload.file_id),
+        organization_id=organization_id,
+        workspace_id=workspace_id,
         original_filename=stored_upload.original_filename,
         content_type=stored_upload.content_type,
         file_type=stored_upload.storage_path.suffix.lower().lstrip("."),
@@ -67,8 +73,15 @@ async def upload_file(
 async def parse_uploaded_file(
     file_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> ParsedDocumentResponse:
-    uploaded_file = await get_uploaded_file(session, file_id)
+    organization_id, workspace_id = tenant_ids(context)
+    uploaded_file = await get_uploaded_file(
+        session,
+        file_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     if uploaded_file is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -91,12 +104,16 @@ async def extract_uploaded_file(
     file_id: UUID,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> ExtractionRunResponse:
+    organization_id, workspace_id = tenant_ids(context)
     try:
         pipeline_result = await run_document_pipeline(
             session=session,
             settings=settings,
             file_id=file_id,
+            organization_id=organization_id,
+            workspace_id=workspace_id,
         )
     except PipelineInputError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

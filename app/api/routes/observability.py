@@ -4,7 +4,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_optional_context, tenant_ids
 from app.api.schemas import AuditLogResponse, ExtractionErrorResponse
+from app.auth.service import AuthContext
 from app.db.models import AuditLog, ExtractionErrorLog
 from app.db.repositories import list_audit_logs, list_extraction_errors
 from app.db.session import get_db_session
@@ -42,16 +44,30 @@ def to_extraction_error_response(error_log: ExtractionErrorLog) -> ExtractionErr
 @router.get("/audit-logs", response_model=list[AuditLogResponse])
 async def get_audit_logs(
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[AuditLogResponse]:
-    audit_logs = await list_audit_logs(session, limit=limit)
+    organization_id, workspace_id = tenant_ids(context)
+    audit_logs = await list_audit_logs(
+        session,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        limit=limit,
+    )
     return [to_audit_log_response(audit_log) for audit_log in audit_logs]
 
 
 @router.get("/extraction-errors", response_model=list[ExtractionErrorResponse])
 async def get_extraction_errors(
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[ExtractionErrorResponse]:
-    error_logs = await list_extraction_errors(session, limit=limit)
+    organization_id, workspace_id = tenant_ids(context)
+    error_logs = await list_extraction_errors(
+        session,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+        limit=limit,
+    )
     return [to_extraction_error_response(error_log) for error_log in error_logs]

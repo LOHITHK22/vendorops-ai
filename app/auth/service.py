@@ -87,6 +87,8 @@ async def seed_default_identity(session: AsyncSession, settings: Settings) -> No
         action="identity.demo_seeded",
         entity_type="organization",
         entity_id=organization.id,
+        organization_id=organization.id,
+        workspace_id=workspace.id,
         details={
             "user_email": user.email,
             "workspace_id": workspace.id,
@@ -122,6 +124,8 @@ async def authenticate_user(
         action="auth.login",
         entity_type="user_account",
         entity_id=user.id,
+        organization_id=context.organization.id,
+        workspace_id=context.workspace.id,
         details={
             "organization_id": context.organization.id,
             "workspace_id": context.workspace.id,

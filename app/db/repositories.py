@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -20,6 +20,8 @@ async def create_uploaded_file(
     session: AsyncSession,
     *,
     file_id: UUID,
+    organization_id: UUID | str | None = None,
+    workspace_id: UUID | str | None = None,
     original_filename: str,
     content_type: str,
     file_type: str,
@@ -29,6 +31,8 @@ async def create_uploaded_file(
 ) -> UploadedFile:
     uploaded_file = UploadedFile(
         id=str(file_id),
+        organization_id=str(organization_id) if organization_id else None,
+        workspace_id=str(workspace_id) if workspace_id else None,
         original_filename=original_filename,
         content_type=content_type,
         file_type=file_type,
@@ -42,6 +46,8 @@ async def create_uploaded_file(
         action="file.uploaded",
         entity_type="uploaded_file",
         entity_id=str(file_id),
+        organization_id=organization_id,
+        workspace_id=workspace_id,
         details={
             "original_filename": original_filename,
             "content_type": content_type,
@@ -54,8 +60,23 @@ async def create_uploaded_file(
     return uploaded_file
 
 
-async def get_uploaded_file(session: AsyncSession, file_id: UUID) -> UploadedFile | None:
-    return await session.get(UploadedFile, str(file_id))
+async def get_uploaded_file(
+    session: AsyncSession,
+    file_id: UUID,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
+) -> UploadedFile | None:
+    uploaded_file = await session.get(UploadedFile, str(file_id))
+    if uploaded_file is None:
+        return None
+    if not is_tenant_match(
+        uploaded_file,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    ):
+        return None
+    return uploaded_file
 
 
 async def create_processing_job(
@@ -64,9 +85,13 @@ async def create_processing_job(
     job_id: UUID,
     file_id: UUID,
     pipeline: str,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
 ) -> ProcessingJob:
     job = ProcessingJob(
         id=str(job_id),
+        organization_id=str(organization_id) if organization_id else None,
+        workspace_id=str(workspace_id) if workspace_id else None,
         file_id=str(file_id),
         pipeline=pipeline,
         status="queued",
@@ -77,6 +102,8 @@ async def create_processing_job(
         action="job.created",
         entity_type="processing_job",
         entity_id=str(job_id),
+        organization_id=organization_id,
+        workspace_id=workspace_id,
         details={"file_id": str(file_id), "pipeline": pipeline},
     )
     await session.commit()
@@ -84,8 +111,19 @@ async def create_processing_job(
     return job
 
 
-async def get_processing_job(session: AsyncSession, job_id: UUID) -> ProcessingJob | None:
-    return await session.get(ProcessingJob, str(job_id))
+async def get_processing_job(
+    session: AsyncSession,
+    job_id: UUID,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
+) -> ProcessingJob | None:
+    job = await session.get(ProcessingJob, str(job_id))
+    if job is None:
+        return None
+    if not is_tenant_match(job, organization_id=organization_id, workspace_id=workspace_id):
+        return None
+    return job
 
 
 async def update_processing_job_status(
@@ -102,6 +140,8 @@ async def update_processing_job_status(
         action="job.status_updated",
         entity_type="processing_job",
         entity_id=job.id,
+        organization_id=UUID(job.organization_id) if job.organization_id else None,
+        workspace_id=UUID(job.workspace_id) if job.workspace_id else None,
         details={"status": status, "error_message": error_message},
     )
     await session.commit()
@@ -114,10 +154,14 @@ async def create_extracted_record(
     *,
     file_id: UUID,
     job_id: UUID | None,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
     extracted: ExtractedBusinessRecord,
     raw_payload: dict,
 ) -> ExtractedRecord:
     record = ExtractedRecord(
+        organization_id=str(organization_id) if organization_id else None,
+        workspace_id=str(workspace_id) if workspace_id else None,
         file_id=str(file_id),
         job_id=str(job_id) if job_id else None,
         record_type=extracted.record_type.value,
@@ -134,6 +178,8 @@ async def create_extracted_record(
         action="record.extracted",
         entity_type="extracted_record",
         entity_id=record.id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
         details={
             "file_id": str(file_id),
             "job_id": str(job_id) if job_id else None,
@@ -147,15 +193,35 @@ async def create_extracted_record(
     return record
 
 
-async def list_extracted_records(session: AsyncSession) -> list[ExtractedRecord]:
-    result = await session.execute(
-        select(ExtractedRecord).order_by(ExtractedRecord.created_at.desc())
-    )
+async def list_extracted_records(
+    session: AsyncSession,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
+) -> list[ExtractedRecord]:
+    query = apply_tenant_filter(
+        select(ExtractedRecord),
+        ExtractedRecord,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    ).order_by(ExtractedRecord.created_at.desc())
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 
-async def get_extracted_record(session: AsyncSession, record_id: UUID) -> ExtractedRecord | None:
-    return await session.get(ExtractedRecord, str(record_id))
+async def get_extracted_record(
+    session: AsyncSession,
+    record_id: UUID,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
+) -> ExtractedRecord | None:
+    record = await session.get(ExtractedRecord, str(record_id))
+    if record is None:
+        return None
+    if not is_tenant_match(record, organization_id=organization_id, workspace_id=workspace_id):
+        return None
+    return record
 
 
 async def create_validation_errors(
@@ -163,10 +229,14 @@ async def create_validation_errors(
     *,
     record_id: UUID,
     job_id: UUID | None,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
     findings: list[ValidationFinding],
 ) -> list[ValidationError]:
     validation_errors = [
         ValidationError(
+            organization_id=str(organization_id) if organization_id else None,
+            workspace_id=str(workspace_id) if workspace_id else None,
             record_id=str(record_id),
             job_id=str(job_id) if job_id else None,
             field_name=finding.field_name,
@@ -182,6 +252,8 @@ async def create_validation_errors(
         action="record.validated",
         entity_type="extracted_record",
         entity_id=str(record_id),
+        organization_id=organization_id,
+        workspace_id=workspace_id,
         details={
             "job_id": str(job_id) if job_id else None,
             "finding_count": len(findings),
@@ -194,22 +266,36 @@ async def create_validation_errors(
     return validation_errors
 
 
-async def list_validation_errors(session: AsyncSession) -> list[ValidationError]:
-    result = await session.execute(
-        select(ValidationError).order_by(ValidationError.created_at.desc())
-    )
+async def list_validation_errors(
+    session: AsyncSession,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
+) -> list[ValidationError]:
+    query = apply_tenant_filter(
+        select(ValidationError),
+        ValidationError,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    ).order_by(ValidationError.created_at.desc())
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 
 async def list_validation_errors_for_record(
     session: AsyncSession,
     record_id: UUID,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
 ) -> list[ValidationError]:
-    result = await session.execute(
-        select(ValidationError)
-        .where(ValidationError.record_id == str(record_id))
-        .order_by(ValidationError.created_at.desc())
-    )
+    query = apply_tenant_filter(
+        select(ValidationError).where(ValidationError.record_id == str(record_id)),
+        ValidationError,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    ).order_by(ValidationError.created_at.desc())
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 
@@ -217,22 +303,29 @@ async def create_generated_report(
     session: AsyncSession,
     *,
     report_type: str,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
     parameters: dict,
     storage_path: str,
     status: str = "created",
 ) -> GeneratedReport:
     report = GeneratedReport(
+        organization_id=str(organization_id) if organization_id else None,
+        workspace_id=str(workspace_id) if workspace_id else None,
         report_type=report_type,
         status=status,
         parameters=parameters,
         storage_path=storage_path,
     )
     session.add(report)
+    await session.flush()
     await create_audit_log(
         session,
         action="report.generated",
         entity_type="generated_report",
         entity_id=report.id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
         details={
             "report_type": report_type,
             "storage_path": storage_path,
@@ -244,15 +337,35 @@ async def create_generated_report(
     return report
 
 
-async def list_generated_reports(session: AsyncSession) -> list[GeneratedReport]:
-    result = await session.execute(
-        select(GeneratedReport).order_by(GeneratedReport.created_at.desc())
-    )
+async def list_generated_reports(
+    session: AsyncSession,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
+) -> list[GeneratedReport]:
+    query = apply_tenant_filter(
+        select(GeneratedReport),
+        GeneratedReport,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    ).order_by(GeneratedReport.created_at.desc())
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 
-async def get_generated_report(session: AsyncSession, report_id: UUID) -> GeneratedReport | None:
-    return await session.get(GeneratedReport, str(report_id))
+async def get_generated_report(
+    session: AsyncSession,
+    report_id: UUID,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
+) -> GeneratedReport | None:
+    report = await session.get(GeneratedReport, str(report_id))
+    if report is None:
+        return None
+    if not is_tenant_match(report, organization_id=organization_id, workspace_id=workspace_id):
+        return None
+    return report
 
 
 async def create_audit_log(
@@ -261,10 +374,14 @@ async def create_audit_log(
     action: str,
     entity_type: str,
     entity_id: str | None,
+    organization_id: UUID | str | None = None,
+    workspace_id: UUID | str | None = None,
     details: dict | None = None,
     actor: str = "system",
 ) -> AuditLog:
     audit_log = AuditLog(
+        organization_id=str(organization_id) if organization_id else None,
+        workspace_id=str(workspace_id) if workspace_id else None,
         actor=actor,
         action=action,
         entity_type=entity_type,
@@ -275,10 +392,20 @@ async def create_audit_log(
     return audit_log
 
 
-async def list_audit_logs(session: AsyncSession, *, limit: int = 50) -> list[AuditLog]:
-    result = await session.execute(
-        select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
-    )
+async def list_audit_logs(
+    session: AsyncSession,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
+    limit: int = 50,
+) -> list[AuditLog]:
+    query = apply_tenant_filter(
+        select(AuditLog),
+        AuditLog,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    ).order_by(AuditLog.created_at.desc()).limit(limit)
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 
@@ -295,11 +422,15 @@ async def create_extraction_error(
     message: str,
     retryable: bool,
     attempt: int,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
     job_id: UUID | None = None,
     file_id: UUID | None = None,
     details: dict | None = None,
 ) -> ExtractionErrorLog:
     error_log = ExtractionErrorLog(
+        organization_id=str(organization_id) if organization_id else None,
+        workspace_id=str(workspace_id) if workspace_id else None,
         job_id=str(job_id) if job_id else None,
         file_id=str(file_id) if file_id else None,
         stage=stage,
@@ -316,6 +447,8 @@ async def create_extraction_error(
         action="pipeline.error_recorded",
         entity_type="extraction_error",
         entity_id=error_log.id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
         details={
             "job_id": str(job_id) if job_id else None,
             "file_id": str(file_id) if file_id else None,
@@ -333,9 +466,40 @@ async def create_extraction_error(
 async def list_extraction_errors(
     session: AsyncSession,
     *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
     limit: int = 50,
 ) -> list[ExtractionErrorLog]:
-    result = await session.execute(
-        select(ExtractionErrorLog).order_by(ExtractionErrorLog.created_at.desc()).limit(limit)
-    )
+    query = apply_tenant_filter(
+        select(ExtractionErrorLog),
+        ExtractionErrorLog,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    ).order_by(ExtractionErrorLog.created_at.desc()).limit(limit)
+    result = await session.execute(query)
     return list(result.scalars().all())
+
+
+def apply_tenant_filter(query, model, *, organization_id: UUID | None, workspace_id: UUID | None):
+    if organization_id is not None:
+        query = query.where(
+            or_(model.organization_id == str(organization_id), model.organization_id.is_(None))
+        )
+    if workspace_id is not None:
+        query = query.where(
+            or_(model.workspace_id == str(workspace_id), model.workspace_id.is_(None))
+        )
+    return query
+
+
+def is_tenant_match(
+    entity,
+    *,
+    organization_id: UUID | None,
+    workspace_id: UUID | None,
+) -> bool:
+    if organization_id is not None and entity.organization_id not in (None, str(organization_id)):
+        return False
+    if workspace_id is not None and entity.workspace_id not in (None, str(workspace_id)):
+        return False
+    return True

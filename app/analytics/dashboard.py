@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,19 +23,53 @@ from app.db.models import (
     UploadedFile,
     ValidationError,
 )
+from app.db.repositories import apply_tenant_filter
 
 
 async def build_analytics_dashboard(
     session: AsyncSession,
     settings: Settings,
+    *,
+    organization_id: UUID | None = None,
+    workspace_id: UUID | None = None,
 ) -> AnalyticsDashboardResponse:
     now = datetime.now(UTC)
-    files = await _list_all(session, UploadedFile)
-    jobs = await _list_all(session, ProcessingJob)
-    records = await _list_all(session, ExtractedRecord)
-    validation_errors = await _list_all(session, ValidationError)
-    extraction_errors = await _list_all(session, ExtractionErrorLog)
-    reports = await _list_all(session, GeneratedReport)
+    files = await _list_all(
+        session,
+        UploadedFile,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
+    jobs = await _list_all(
+        session,
+        ProcessingJob,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
+    records = await _list_all(
+        session,
+        ExtractedRecord,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
+    validation_errors = await _list_all(
+        session,
+        ValidationError,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
+    extraction_errors = await _list_all(
+        session,
+        ExtractionErrorLog,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
+    reports = await _list_all(
+        session,
+        GeneratedReport,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
 
     record_by_id = {record.id: record for record in records}
     file_by_id = {file.id: file for file in files}
@@ -177,8 +212,20 @@ async def build_analytics_dashboard(
     )
 
 
-async def _list_all(session: AsyncSession, model: type) -> list[Any]:
-    result = await session.execute(select(model))
+async def _list_all(
+    session: AsyncSession,
+    model: type,
+    *,
+    organization_id: UUID | None,
+    workspace_id: UUID | None,
+) -> list[Any]:
+    query = apply_tenant_filter(
+        select(model),
+        model,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
+    result = await session.execute(query)
     return list(result.scalars().all())
 
 

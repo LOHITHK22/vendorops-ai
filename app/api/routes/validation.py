@@ -4,7 +4,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_optional_context, tenant_ids
 from app.api.schemas import ValidationErrorResponse
+from app.auth.service import AuthContext
 from app.db.repositories import list_validation_errors, list_validation_errors_for_record
 from app.db.session import get_db_session
 
@@ -27,8 +29,14 @@ def to_validation_error_response(validation_error) -> ValidationErrorResponse:
 @router.get("", response_model=list[ValidationErrorResponse])
 async def get_validation_errors(
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> list[ValidationErrorResponse]:
-    validation_errors = await list_validation_errors(session)
+    organization_id, workspace_id = tenant_ids(context)
+    validation_errors = await list_validation_errors(
+        session,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     return [to_validation_error_response(error) for error in validation_errors]
 
 
@@ -36,6 +44,13 @@ async def get_validation_errors(
 async def get_record_validation_errors(
     record_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthContext | None, Depends(get_optional_context)],
 ) -> list[ValidationErrorResponse]:
-    validation_errors = await list_validation_errors_for_record(session, record_id)
+    organization_id, workspace_id = tenant_ids(context)
+    validation_errors = await list_validation_errors_for_record(
+        session,
+        record_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
     return [to_validation_error_response(error) for error in validation_errors]
