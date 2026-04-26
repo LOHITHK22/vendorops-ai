@@ -25,7 +25,7 @@ import {
   Workflow,
   XCircle,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   API_BASE_URL,
@@ -121,10 +121,10 @@ export default function App() {
     }
   }
 
-  async function handleDemoLogin() {
+  async function handleLogin(email: string, password: string) {
     setAuthError(null);
     try {
-      const result = await login("admin@vendorops.ai", "VendorOpsDemo123!");
+      const result = await login(email, password);
       localStorage.setItem("vendorops_access_token", result.access_token);
       setAuthUser(result.user);
     } catch (error) {
@@ -257,7 +257,7 @@ export default function App() {
             <SaaSIdentityPanel
               authUser={authUser}
               authError={authError}
-              onLogin={() => void handleDemoLogin()}
+              onLogin={(email, password) => void handleLogin(email, password)}
               onLogout={handleLogout}
             />
           </section>
@@ -456,9 +456,17 @@ function SaaSIdentityPanel({
 }: {
   authUser: AuthUserResponse | null;
   authError: string | null;
-  onLogin: () => void;
+  onLogin: (email: string, password: string) => void;
   onLogout: () => void;
 }) {
+  const [email, setEmail] = useState("admin@vendorops.ai");
+  const [password, setPassword] = useState("VendorOpsDemo123!");
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onLogin(email, password);
+  }
+
   return (
     <section className="rounded-xl border border-cloud-200 bg-white p-5 shadow-soft sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -479,21 +487,49 @@ function SaaSIdentityPanel({
           >
             Sign out
           </button>
-        ) : (
-          <button
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-ink-900"
-            onClick={onLogin}
-          >
-            <LockKeyhole className="h-4 w-4" />
-            Sign in demo owner
-          </button>
-        )}
+        ) : null}
       </div>
 
       {authError ? (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {authError}
         </div>
+      ) : null}
+
+      {!authUser ? (
+        <form
+          className="mt-5 grid gap-3 rounded-lg border border-cloud-200 bg-cloud-50 p-4 lg:grid-cols-[1fr_1fr_auto]"
+          onSubmit={handleSubmit}
+        >
+          <label className="text-sm font-medium text-ink-700">
+            Email
+            <input
+              className="mt-2 w-full rounded-lg border border-cloud-200 bg-white px-3 py-2 text-sm text-ink-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <label className="text-sm font-medium text-ink-700">
+            Password
+            <input
+              className="mt-2 w-full rounded-lg border border-cloud-200 bg-white px-3 py-2 text-sm text-ink-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          <div className="flex items-end">
+            <button className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-ink-900">
+              <LockKeyhole className="h-4 w-4" />
+              Sign in
+            </button>
+          </div>
+          <p className="text-xs leading-5 text-ink-500 lg:col-span-3">
+            Demo owner credentials are prefilled for local testing. Replace them in `.env` before
+            a real deployment.
+          </p>
+        </form>
       ) : null}
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
