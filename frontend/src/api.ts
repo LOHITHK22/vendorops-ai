@@ -76,6 +76,17 @@ export type GeneratedReportResponse = {
   created_at: string;
 };
 
+export type SummaryReportResponse = {
+  generated_at: string;
+  record_count: number;
+  validation_finding_count: number;
+  records_by_type: Record<string, number>;
+  findings_by_severity: Record<string, number>;
+  findings_by_type: Record<string, number>;
+  vendor_totals: Array<{ vendor_name: string; total_amount: number }>;
+  records: Array<Record<string, unknown>>;
+};
+
 export type AuditLogResponse = {
   audit_log_id: string;
   actor: string;
@@ -144,6 +155,11 @@ export async function extractFile(fileId: string): Promise<ExtractionRunResponse
   return parseJsonResponse<ExtractionRunResponse>(response);
 }
 
+export async function getRecords(): Promise<ExtractedRecordResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/v1/records`);
+  return parseJsonResponse<ExtractedRecordResponse[]>(response);
+}
+
 export async function createReport(
   reportType: "summary" | "records",
   format: "json" | "csv",
@@ -154,6 +170,16 @@ export async function createReport(
     body: JSON.stringify({ report_type: reportType, format }),
   });
   return parseJsonResponse<GeneratedReportResponse>(response);
+}
+
+export async function getReports(): Promise<GeneratedReportResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/v1/reports`);
+  return parseJsonResponse<GeneratedReportResponse[]>(response);
+}
+
+export async function getSummaryReport(reportId: string): Promise<SummaryReportResponse> {
+  const response = await fetch(getReportDownloadUrl(reportId));
+  return parseJsonResponse<SummaryReportResponse>(response);
 }
 
 export async function getAuditLogs(limit = 8): Promise<AuditLogResponse[]> {

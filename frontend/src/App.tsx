@@ -31,14 +31,18 @@ import {
   type ExtractionErrorResponse,
   type ParsedDocumentResponse,
   type ProcessingJobResponse,
+  type SummaryReportResponse,
   type UploadedFileResponse,
   type ValidationErrorResponse,
   createReport,
   extractFile,
   getAuditLogs,
   getExtractionErrors,
+  getRecords,
   getReportDownloadUrl,
+  getReports,
   getHealth,
+  getSummaryReport,
   parseFile,
   uploadFile,
 } from "./api";
@@ -75,6 +79,7 @@ export default function App() {
   const [job, setJob] = useState<ProcessingJobResponse | null>(null);
   const [parsedDocument, setParsedDocument] = useState<ParsedDocumentResponse | null>(null);
   const [extractedRecord, setExtractedRecord] = useState<ExtractedRecordResponse | null>(null);
+  const [records, setRecords] = useState<ExtractedRecordResponse[]>([]);
   const [validationErrors, setValidationErrors] = useState<ValidationErrorResponse[]>([]);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReportResponse[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogResponse[]>([]);
@@ -87,7 +92,19 @@ export default function App() {
       .then(setHealth)
       .catch((error: Error) => setHealthError(error.message));
     void refreshObservability();
+    void refreshWorkspaceData();
   }, []);
+
+  async function refreshWorkspaceData() {
+    try {
+      const [recordList, reportList] = await Promise.all([getRecords(), getReports()]);
+      setRecords(recordList);
+      setGeneratedReports(reportList);
+    } catch {
+      setRecords([]);
+      setGeneratedReports([]);
+    }
+  }
 
   async function refreshObservability() {
     try {
@@ -104,8 +121,8 @@ export default function App() {
     () => [
       {
         label: "Documents processed",
-        value: uploadedFile ? "1" : "0",
-        change: uploadedFile ? "Ready for extraction" : "Awaiting upload",
+        value: String(records.length),
+        change: records.length > 0 ? "Available for reporting" : "Awaiting upload",
         icon: FileText,
       },
       {
@@ -129,7 +146,7 @@ export default function App() {
         icon: Server,
       },
     ],
-    [extractedRecord, health, healthError, job, uploadedFile],
+    [extractedRecord, health, healthError, job, records.length],
   );
 
   async function handleUpload() {
@@ -155,10 +172,12 @@ export default function App() {
       ]);
       setJob(extraction.job);
       setExtractedRecord(extraction.record);
+      setRecords((currentRecords) => [extraction.record, ...currentRecords]);
       setValidationErrors(extraction.validation_errors);
       setParsedDocument(parsed);
       setUploadState("uploaded");
       void refreshObservability();
+      void refreshWorkspaceData();
     } catch (error) {
       setUploadState("error");
       setFormError(error instanceof Error ? error.message : "Upload failed.");
@@ -212,6 +231,7 @@ export default function App() {
               <ReportsPanel
                 uploadedFile={uploadedFile}
                 extractedRecord={extractedRecord}
+                records={records}
                 validationErrors={validationErrors}
                 generatedReports={generatedReports}
                 onReportGenerated={(report) =>
@@ -567,18 +587,42 @@ function InfoTile({ label, value }: { label: string; value: string }) {
 function ReportsPanel({
   uploadedFile,
   extractedRecord,
+  records,
   validationErrors,
   generatedReports,
   onReportGenerated,
 }: {
   uploadedFile: UploadedFileResponse | null;
   extractedRecord: ExtractedRecordResponse | null;
+  records: ExtractedRecordResponse[];
   validationErrors: ValidationErrorResponse[];
   generatedReports: GeneratedReportResponse[];
   onReportGenerated: (report: GeneratedReportResponse) => void;
 }) {
   const [reportError, setReportError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [summaryReport, setSummaryReport] = useState<SummaryReportResponse | null>(null);
+  const hasRecords = records.length > 0;
+  const previewRecord = extractedRecord ?? records[0] ?? null;
+  const previewAmount =
+    typeof previewRecord?.normalized_payload.total_amount === "number"
+      ? previewRecord.normalized_payload.total_amount
+      : null;
+  const previewCurrency =
+    typeof previewRecord?.normalized_payload.currency === "string"
+      ? previewRecord.normalized_payload.currency
+      : "USD";
+  const vendorTotals =
+    summaryReport?.vendor_totals ??
+    (previewRecord
+      ? [
+          {
+            vendor_name: previewRecord.vendor_name ?? "Unknown vendor",
+            total_amount: previewAmount ?? 0,
+          },
+        ]
+      : []);
+  const totalSpend = vendorTotals.reduce((total, vendor) => total + vendor.total_amount, 0);
 
   async function handleCreateReport(reportType: "summary" | "records", format: "json" | "csv") {
     setIsGenerating(true);
@@ -586,6 +630,10 @@ function ReportsPanel({
     try {
       const report = await createReport(reportType, format);
       onReportGenerated(report);
+      if (reportType === "summary" && format === "json") {
+        const summary = await getSummaryReport(report.report_id);
+        setSummaryReport(summary);
+      }
     } catch (error) {
       setReportError(error instanceof Error ? error.message : "Report generation failed.");
     } finally {
@@ -596,17 +644,17 @@ function ReportsPanel({
   const rows = [
     {
       name: "Vendor spend summary",
-      status: uploadedFile ? "Ready soon" : "Waiting",
+      status: hasRecords ? `${records.length} records ready` : "Upload and extract first",
       icon: BarChart3,
     },
     {
       name: "Validation exceptions",
-      status: extractedRecord ? `${validationErrors.length} findings` : "Waiting",
+      status: hasRecords ? `${validationErrors.length} current findings` : "Waiting",
       icon: ShieldCheck,
     },
     {
       name: "Audit package",
-      status: uploadedFile ? formatDate(uploadedFile.created_at) : "Waiting",
+      status: uploadedFile ? formatDate(uploadedFile.created_at) : `${generatedReports.length} reports`,
       icon: FileText,
     },
   ];
@@ -638,18 +686,75 @@ function ReportsPanel({
       <div className="mt-5 grid gap-2 sm:grid-cols-2">
         <button
           className="rounded-lg bg-ink-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-ink-900 disabled:opacity-60"
-          disabled={!extractedRecord || isGenerating}
+          disabled={!hasRecords || isGenerating}
           onClick={() => void handleCreateReport("summary", "json")}
         >
-          Generate JSON
+          {isGenerating ? "Generating" : "Generate JSON"}
         </button>
         <button
           className="rounded-lg border border-cloud-200 bg-white px-3 py-2 text-sm font-semibold text-ink-900 transition hover:bg-cloud-50 disabled:opacity-60"
-          disabled={!extractedRecord || isGenerating}
+          disabled={!hasRecords || isGenerating}
           onClick={() => void handleCreateReport("records", "csv")}
         >
           Generate CSV
         </button>
+      </div>
+
+      <div className="mt-5 rounded-lg border border-cloud-200 bg-cloud-50 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ink-900">Vendor spend summary</p>
+            <p className="mt-1 text-xs text-ink-500">
+              {hasRecords ? `${records.length} extracted records available` : "No records yet"}
+            </p>
+          </div>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-700 shadow-line">
+            {summaryReport ? "Generated" : "Preview"}
+          </span>
+        </div>
+
+        {hasRecords ? (
+          <div className="mt-4 space-y-3">
+            <div className="rounded-lg bg-white p-4 shadow-line">
+              <p className="text-xs font-medium text-ink-500">Total vendor spend</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-950">
+                {totalSpend.toLocaleString(undefined, {
+                  style: "currency",
+                  currency: previewCurrency,
+                })}
+              </p>
+            </div>
+            {vendorTotals.slice(0, 4).map((vendor) => (
+              <div key={vendor.vendor_name} className="rounded-lg bg-white p-3 shadow-line">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="truncate text-sm font-semibold text-ink-900">{vendor.vendor_name}</p>
+                  <p className="text-sm font-semibold text-ink-700">
+                    {vendor.total_amount.toLocaleString(undefined, {
+                      style: "currency",
+                      currency: previewCurrency,
+                    })}
+                  </p>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-cloud-100">
+                  <div
+                    className="h-full rounded-full bg-brand-600"
+                    style={{
+                      width: `${Math.max(
+                        8,
+                        totalSpend > 0 ? (vendor.total_amount / totalSpend) * 100 : 8,
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-lg bg-white p-4 text-sm leading-6 text-ink-500 shadow-line">
+            Upload and extract at least one invoice, contract, CSV, email, or PDF before generating
+            report outputs.
+          </p>
+        )}
       </div>
 
       {reportError ? (
