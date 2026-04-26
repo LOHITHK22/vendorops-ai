@@ -45,6 +45,7 @@ import {
 
 type UploadState = "idle" | "uploading" | "uploaded" | "error";
 type IconComponent = typeof FileText;
+type SectionId = "command-center" | "ingestion" | "jobs" | "records" | "reports" | "audit";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -66,6 +67,7 @@ function cx(...classes: Array<string | false | null | undefined>): string {
 }
 
 export default function App() {
+  const [activeSection, setActiveSection] = useState<SectionId>("command-center");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -164,44 +166,62 @@ export default function App() {
     }
   }
 
+  function handleNavigate(sectionId: SectionId) {
+    setActiveSection(sectionId);
+    document.getElementById(sectionId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#eff6ff_0,#f8fafc_34%,#ffffff_72%)] text-ink-900">
       <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col lg:flex-row">
-        <Sidebar />
+        <Sidebar activeSection={activeSection} onNavigate={handleNavigate} />
         <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8">
-          <TopBar health={health} healthError={healthError} />
+          <section id="command-center" className="scroll-mt-6">
+            <TopBar health={health} healthError={healthError} />
+          </section>
 
-          <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="mt-6 grid scroll-mt-6 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {metrics.map((metric) => (
               <MetricCard key={metric.label} {...metric} />
             ))}
           </section>
 
           <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-            <UploadPanel
-              selectedFile={selectedFile}
-              uploadState={uploadState}
-              formError={formError}
-              onFileSelect={setSelectedFile}
-              onUpload={handleUpload}
-            />
-            <StatusPanel health={health} healthError={healthError} uploadedFile={uploadedFile} job={job} />
+            <div id="ingestion" className="scroll-mt-6">
+              <UploadPanel
+                selectedFile={selectedFile}
+                uploadState={uploadState}
+                formError={formError}
+                onFileSelect={setSelectedFile}
+                onUpload={handleUpload}
+              />
+            </div>
+            <div id="jobs" className="scroll-mt-6">
+              <StatusPanel health={health} healthError={healthError} uploadedFile={uploadedFile} job={job} />
+            </div>
           </section>
 
           <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <ExtractionPreview parsedDocument={parsedDocument} extractedRecord={extractedRecord} />
-            <ReportsPanel
-              uploadedFile={uploadedFile}
-              extractedRecord={extractedRecord}
-              validationErrors={validationErrors}
-              generatedReports={generatedReports}
-              onReportGenerated={(report) =>
-                setGeneratedReports((currentReports) => [report, ...currentReports])
-              }
-            />
+            <div id="records" className="scroll-mt-6">
+              <ExtractionPreview parsedDocument={parsedDocument} extractedRecord={extractedRecord} />
+            </div>
+            <div id="reports" className="scroll-mt-6">
+              <ReportsPanel
+                uploadedFile={uploadedFile}
+                extractedRecord={extractedRecord}
+                validationErrors={validationErrors}
+                generatedReports={generatedReports}
+                onReportGenerated={(report) =>
+                  setGeneratedReports((currentReports) => [report, ...currentReports])
+                }
+              />
+            </div>
           </section>
 
-          <section className="mt-6">
+          <section id="audit" className="mt-6 scroll-mt-6">
             <ObservabilityPanel
               auditLogs={auditLogs}
               extractionErrors={extractionErrors}
@@ -214,14 +234,20 @@ export default function App() {
   );
 }
 
-function Sidebar() {
-  const navItems = [
-    { label: "Command Center", icon: Layers3, active: true },
-    { label: "Ingestion", icon: UploadCloud },
-    { label: "Jobs", icon: Workflow },
-    { label: "Records", icon: Database },
-    { label: "Reports", icon: BarChart3 },
-    { label: "Audit", icon: ShieldCheck },
+function Sidebar({
+  activeSection,
+  onNavigate,
+}: {
+  activeSection: SectionId;
+  onNavigate: (sectionId: SectionId) => void;
+}) {
+  const navItems: Array<{ id: SectionId; label: string; icon: IconComponent }> = [
+    { id: "command-center", label: "Command Center", icon: Layers3 },
+    { id: "ingestion", label: "Ingestion", icon: UploadCloud },
+    { id: "jobs", label: "Jobs", icon: Workflow },
+    { id: "records", label: "Records", icon: Database },
+    { id: "reports", label: "Reports", icon: BarChart3 },
+    { id: "audit", label: "Audit", icon: ShieldCheck },
   ];
 
   return (
@@ -240,9 +266,12 @@ function Sidebar() {
         {navItems.map((item) => (
           <button
             key={item.label}
+            type="button"
+            aria-current={activeSection === item.id ? "page" : undefined}
+            onClick={() => onNavigate(item.id)}
             className={cx(
               "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-              item.active
+              activeSection === item.id
                 ? "bg-ink-950 text-white shadow-soft"
                 : "text-ink-500 hover:bg-cloud-100 hover:text-ink-900",
             )}
