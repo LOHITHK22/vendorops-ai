@@ -6,24 +6,30 @@ import {
   CheckCircle2,
   Clock3,
   Database,
+  DollarSign,
   FileJson2,
   FileText,
+  FileWarning,
   Gauge,
   Layers3,
   Loader2,
   LockKeyhole,
+  RefreshCw,
   Search,
   Server,
   ShieldCheck,
   Sparkles,
+  Target,
+  TrendingUp,
   UploadCloud,
   Workflow,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   API_BASE_URL,
+  type AnalyticsDashboardResponse,
   type GeneratedReportResponse,
   type HealthResponse,
   type AuditLogResponse,
@@ -36,6 +42,7 @@ import {
   type ValidationErrorResponse,
   createReport,
   extractFile,
+  getAnalyticsDashboard,
   getAuditLogs,
   getExtractionErrors,
   getRecords,
@@ -82,6 +89,7 @@ export default function App() {
   const [records, setRecords] = useState<ExtractedRecordResponse[]>([]);
   const [validationErrors, setValidationErrors] = useState<ValidationErrorResponse[]>([]);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReportResponse[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsDashboardResponse | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogResponse[]>([]);
   const [extractionErrors, setExtractionErrors] = useState<ExtractionErrorResponse[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
@@ -93,7 +101,16 @@ export default function App() {
       .catch((error: Error) => setHealthError(error.message));
     void refreshObservability();
     void refreshWorkspaceData();
+    void refreshAnalytics();
   }, []);
+
+  async function refreshAnalytics() {
+    try {
+      setAnalytics(await getAnalyticsDashboard());
+    } catch {
+      setAnalytics(null);
+    }
+  }
 
   async function refreshWorkspaceData() {
     try {
@@ -178,6 +195,7 @@ export default function App() {
       setUploadState("uploaded");
       void refreshObservability();
       void refreshWorkspaceData();
+      void refreshAnalytics();
     } catch (error) {
       setUploadState("error");
       setFormError(error instanceof Error ? error.message : "Upload failed.");
@@ -206,6 +224,10 @@ export default function App() {
             {metrics.map((metric) => (
               <MetricCard key={metric.label} {...metric} />
             ))}
+          </section>
+
+          <section className="mt-6">
+            <AnalystDashboard analytics={analytics} onRefresh={() => void refreshAnalytics()} />
           </section>
 
           <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
@@ -381,6 +403,240 @@ function MetricCard({
       <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-950">{value}</p>
       <p className="mt-2 text-xs font-medium text-ink-500">{change}</p>
     </article>
+  );
+}
+
+function AnalystDashboard({
+  analytics,
+  onRefresh,
+}: {
+  analytics: AnalyticsDashboardResponse | null;
+  onRefresh: () => void;
+}) {
+  const fallbackKpis = [
+    { label: "Files processed today", value: "--", detail: "Waiting for analytics", trend: "loading", status: "watch" },
+    { label: "Extraction accuracy", value: "--", detail: "No score loaded", trend: "loading", status: "watch" },
+    { label: "Validation burden", value: "--", detail: "No findings loaded", trend: "loading", status: "watch" },
+    { label: "Estimated LLM cost", value: "--", detail: "No cost loaded", trend: "loading", status: "watch" },
+  ];
+  const kpis = analytics?.kpis ?? fallbackKpis;
+  const maxValidation = Math.max(
+    1,
+    ...((analytics?.validation_failures_by_document_type ?? []).map((item) => item.value)),
+  );
+  const maxErrors = Math.max(1, ...((analytics?.error_sources ?? []).map((item) => item.value)));
+  const accuracyTrend = analytics?.extraction_accuracy_over_time ?? [];
+  const latestAccuracy = accuracyTrend.length > 0 ? accuracyTrend[accuracyTrend.length - 1].value : 0;
+
+  return (
+    <section className="rounded-xl border border-cloud-200 bg-white p-5 shadow-soft sm:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-brand-700">Executive intelligence</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink-950">
+            Analyst-grade operations dashboard
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-500">
+            Tracks throughput, validation risk, retry pressure, extraction quality, cost exposure,
+            and report demand from the operational data pipeline.
+          </p>
+        </div>
+        <button
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-cloud-200 bg-white px-3 py-2 text-sm font-semibold text-ink-900 transition hover:bg-cloud-50"
+          onClick={onRefresh}
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh analytics
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {kpis.map((kpi) => (
+          <div key={kpi.label} className="rounded-lg border border-cloud-200 bg-cloud-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase text-ink-500">{kpi.label}</p>
+              <span
+                className={cx(
+                  "h-2.5 w-2.5 rounded-full",
+                  kpi.status === "healthy" && "bg-mint-500",
+                  kpi.status === "watch" && "bg-amber-500",
+                  kpi.status === "risk" && "bg-red-500",
+                )}
+              />
+            </div>
+            <p className="mt-3 text-2xl font-semibold tracking-tight text-ink-950">{kpi.value}</p>
+            <p className="mt-2 text-xs leading-5 text-ink-500">{kpi.detail}</p>
+            <p className="mt-2 text-xs font-semibold text-brand-700">{kpi.trend}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_1fr_0.9fr]">
+        <AnalystCard title="Validation failures by document type" icon={FileWarning}>
+          <RankedBars
+            items={analytics?.validation_failures_by_document_type ?? []}
+            maxValue={maxValidation}
+            emptyText="No validation failures recorded."
+          />
+        </AnalystCard>
+
+        <AnalystCard title="Sources creating the most errors" icon={AlertTriangle}>
+          <RankedBars
+            items={analytics?.error_sources ?? []}
+            maxValue={maxErrors}
+            emptyText="No error sources detected."
+          />
+        </AnalystCard>
+
+        <AnalystCard title="LLM cost and usage" icon={DollarSign}>
+          <div className="rounded-lg bg-cloud-50 p-4">
+            <p className="text-xs text-ink-500">Estimated cost</p>
+            <p className="mt-1 text-2xl font-semibold text-ink-950">
+              ${(analytics?.llm_cost.estimated_cost_usd ?? 0).toFixed(4)}
+            </p>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <InfoTile
+              label="Billable"
+              value={String(analytics?.llm_cost.billable_records ?? 0)}
+            />
+            <InfoTile
+              label="Mock"
+              value={String(analytics?.llm_cost.mock_records ?? 0)}
+            />
+          </div>
+        </AnalystCard>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
+        <AnalystCard title="Extraction accuracy over time" icon={TrendingUp}>
+          {analytics && analytics.extraction_accuracy_over_time.length > 0 ? (
+            <div>
+              <div className="flex items-end gap-2">
+                {analytics.extraction_accuracy_over_time.map((point) => (
+                  <div key={point.date} className="flex flex-1 flex-col items-center gap-2">
+                    <div className="flex h-28 w-full items-end rounded-lg bg-cloud-50 px-1">
+                      <div
+                        className="w-full rounded-md bg-brand-600"
+                        style={{ height: `${Math.max(6, point.value)}%` }}
+                        title={`${point.date}: ${point.value}%`}
+                      />
+                    </div>
+                    <span className="text-[10px] text-ink-500">{point.date.slice(5)}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-sm text-ink-500">
+                Latest average confidence: <span className="font-semibold text-ink-900">{latestAccuracy.toFixed(1)}%</span>
+              </p>
+            </div>
+          ) : (
+            <p className="rounded-lg bg-cloud-50 p-4 text-sm text-ink-500">No confidence trend yet.</p>
+          )}
+        </AnalystCard>
+
+        <AnalystCard title="Blocked jobs and retry hotspots" icon={Target}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase text-ink-500">Blocked jobs</p>
+              {analytics && analytics.blocked_jobs.length > 0 ? (
+                <div className="space-y-2">
+                  {analytics.blocked_jobs.slice(0, 4).map((job) => (
+                    <div key={job.job_id} className="rounded-lg bg-cloud-50 p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-ink-900">{job.status}</span>
+                        <span className="text-xs text-ink-500">{job.age_hours.toFixed(1)}h</span>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-ink-500">{job.error_message ?? job.job_id}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-lg bg-cloud-50 p-3 text-sm text-ink-500">No blocked jobs.</p>
+              )}
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase text-ink-500">Retry hotspots</p>
+              <RankedBars
+                items={analytics?.retry_hotspots ?? []}
+                maxValue={Math.max(1, ...((analytics?.retry_hotspots ?? []).map((item) => item.value)))}
+                emptyText="No retry hotspots."
+              />
+            </div>
+          </div>
+        </AnalystCard>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-cloud-200 bg-ink-950 p-4 text-white">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-blue-200" />
+          <p className="text-sm font-semibold">Analyst notes</p>
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          {(analytics?.analyst_notes ?? ["Analytics are loading from the pipeline database."]).map((note) => (
+            <p key={note} className="rounded-lg bg-white/5 p-3 text-sm leading-6 text-white/75">
+              {note}
+            </p>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AnalystCard({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: IconComponent;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-cloud-200 bg-white p-4 shadow-line">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="grid h-8 w-8 place-items-center rounded-lg bg-cloud-100 text-ink-700">
+          <Icon className="h-4 w-4" />
+        </div>
+        <p className="text-sm font-semibold text-ink-900">{title}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function RankedBars({
+  items,
+  maxValue,
+  emptyText,
+}: {
+  items: Array<{ label: string; value: number; detail?: string | null }>;
+  maxValue: number;
+  emptyText: string;
+}) {
+  if (items.length === 0) {
+    return <p className="rounded-lg bg-cloud-50 p-4 text-sm text-ink-500">{emptyText}</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item) => (
+        <div key={item.label}>
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <p className="truncate text-sm font-semibold text-ink-900">{item.label}</p>
+            <p className="text-sm font-semibold text-ink-700">{item.value}</p>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-cloud-100">
+            <div
+              className="h-full rounded-full bg-brand-600"
+              style={{ width: `${Math.max(6, (item.value / maxValue) * 100)}%` }}
+            />
+          </div>
+          {item.detail ? <p className="mt-1 text-xs text-ink-500">{item.detail}</p> : null}
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -4,7 +4,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import files, health, jobs, observability, records, reports, validation
+from app.api.routes import (
+    analytics,
+    files,
+    health,
+    jobs,
+    observability,
+    records,
+    reports,
+    validation,
+)
 from app.config.settings import get_settings
 from app.db.session import init_db
 from app.observability.logging import configure_logging
@@ -44,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(validation.router, prefix=settings.api_prefix)
     app.include_router(reports.router, prefix=settings.api_prefix)
     app.include_router(observability.router, prefix=settings.api_prefix)
+    app.include_router(analytics.router, prefix=settings.api_prefix)
 
     return app
 

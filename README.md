@@ -82,6 +82,10 @@ Phase 10 is complete:
 - End-to-end API integration tests added for upload, parse, extraction, records, reports, audit logs, and error contracts.
 - Retry utility tests added for recovery and exhausted attempts.
 - Test runner script added for backend linting, backend tests, and frontend build validation.
+- Analyst-grade analytics API added at `GET /v1/analytics/dashboard`.
+- Executive dashboard added for throughput, validation risk, extraction confidence, retries, blocked jobs, cost, and report usage.
+- GitHub Actions CI added for backend lint/tests, frontend build, and Docker Compose validation.
+- Production SaaS architecture documented in `docs/PRODUCTION_SAAS_ARCHITECTURE.md`.
 
 ## Local Setup
 
@@ -144,6 +148,7 @@ GET  /v1/reports/{report_id}
 GET  /v1/reports/{report_id}/download
 GET  /v1/audit-logs
 GET  /v1/extraction-errors
+GET  /v1/analytics/dashboard
 ```
 
 ## Run The API

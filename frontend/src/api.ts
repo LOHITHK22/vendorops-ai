@@ -87,6 +87,55 @@ export type SummaryReportResponse = {
   records: Array<Record<string, unknown>>;
 };
 
+export type AnalyticsKpiResponse = {
+  label: string;
+  value: string;
+  detail: string;
+  trend: string;
+  status: "healthy" | "watch" | "risk" | string;
+};
+
+export type AnalyticsRankedItemResponse = {
+  label: string;
+  value: number;
+  detail?: string | null;
+};
+
+export type AnalyticsTrendPointResponse = {
+  date: string;
+  value: number;
+  detail?: string | null;
+};
+
+export type AnalyticsBlockedJobResponse = {
+  job_id: string;
+  file_id: string;
+  status: string;
+  pipeline: string;
+  age_hours: number;
+  error_message?: string | null;
+};
+
+export type AnalyticsDashboardResponse = {
+  generated_at: string;
+  kpis: AnalyticsKpiResponse[];
+  processed_volume: Record<string, number>;
+  validation_failures_by_document_type: AnalyticsRankedItemResponse[];
+  error_sources: AnalyticsRankedItemResponse[];
+  extraction_accuracy_over_time: AnalyticsTrendPointResponse[];
+  retry_hotspots: AnalyticsRankedItemResponse[];
+  blocked_jobs: AnalyticsBlockedJobResponse[];
+  llm_cost: {
+    estimated_input_tokens: number;
+    estimated_output_tokens: number;
+    estimated_cost_usd: number;
+    billable_records: number;
+    mock_records: number;
+  };
+  business_reports: AnalyticsRankedItemResponse[];
+  analyst_notes: string[];
+};
+
 export type AuditLogResponse = {
   audit_log_id: string;
   actor: string;
@@ -180,6 +229,11 @@ export async function getReports(): Promise<GeneratedReportResponse[]> {
 export async function getSummaryReport(reportId: string): Promise<SummaryReportResponse> {
   const response = await fetch(getReportDownloadUrl(reportId));
   return parseJsonResponse<SummaryReportResponse>(response);
+}
+
+export async function getAnalyticsDashboard(): Promise<AnalyticsDashboardResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/analytics/dashboard`);
+  return parseJsonResponse<AnalyticsDashboardResponse>(response);
 }
 
 export async function getAuditLogs(limit = 8): Promise<AuditLogResponse[]> {

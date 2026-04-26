@@ -137,3 +137,54 @@ class ExtractionErrorResponse(BaseModel):
     attempt: int
     details: dict | None = None
     created_at: datetime
+
+
+class AnalyticsKpiResponse(BaseModel):
+    label: str
+    value: str
+    detail: str
+    trend: str
+    status: str
+
+
+class AnalyticsRankedItemResponse(BaseModel):
+    label: str
+    value: float
+    detail: str | None = None
+
+
+class AnalyticsTrendPointResponse(BaseModel):
+    date: str
+    value: float
+    detail: str | None = None
+
+
+class AnalyticsBlockedJobResponse(BaseModel):
+    job_id: UUID
+    file_id: UUID
+    status: str
+    pipeline: str
+    age_hours: float
+    error_message: str | None = None
+
+
+class AnalyticsCostResponse(BaseModel):
+    estimated_input_tokens: int
+    estimated_output_tokens: int
+    estimated_cost_usd: float
+    billable_records: int
+    mock_records: int
+
+
+class AnalyticsDashboardResponse(BaseModel):
+    generated_at: datetime
+    kpis: list[AnalyticsKpiResponse]
+    processed_volume: dict[str, int]
+    validation_failures_by_document_type: list[AnalyticsRankedItemResponse]
+    error_sources: list[AnalyticsRankedItemResponse]
+    extraction_accuracy_over_time: list[AnalyticsTrendPointResponse]
+    retry_hotspots: list[AnalyticsRankedItemResponse]
+    blocked_jobs: list[AnalyticsBlockedJobResponse]
+    llm_cost: AnalyticsCostResponse
+    business_reports: list[AnalyticsRankedItemResponse]
+    analyst_notes: list[str]
