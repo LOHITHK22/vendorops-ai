@@ -188,3 +188,38 @@ class AnalyticsDashboardResponse(BaseModel):
     llm_cost: AnalyticsCostResponse
     business_reports: list[AnalyticsRankedItemResponse]
     analyst_notes: list[str]
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=8, max_length=255)
+
+
+class WorkspaceSummaryResponse(BaseModel):
+    workspace_id: UUID
+    name: str
+    slug: str
+    role: str
+
+
+class OrganizationSummaryResponse(BaseModel):
+    organization_id: UUID
+    name: str
+    slug: str
+    plan: str
+
+
+class AuthUserResponse(BaseModel):
+    user_id: UUID
+    email: str
+    full_name: str
+    organization: OrganizationSummaryResponse
+    workspace: WorkspaceSummaryResponse
+    permissions: list[str]
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+    user: AuthUserResponse

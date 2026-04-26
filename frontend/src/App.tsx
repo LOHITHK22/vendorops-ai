@@ -30,6 +30,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   API_BASE_URL,
   type AnalyticsDashboardResponse,
+  type AuthUserResponse,
   type GeneratedReportResponse,
   type HealthResponse,
   type AuditLogResponse,
@@ -50,6 +51,8 @@ import {
   getReports,
   getHealth,
   getSummaryReport,
+  getMe,
+  login,
   parseFile,
   uploadFile,
 } from "./api";
@@ -90,6 +93,8 @@ export default function App() {
   const [validationErrors, setValidationErrors] = useState<ValidationErrorResponse[]>([]);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReportResponse[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsDashboardResponse | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUserResponse | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogResponse[]>([]);
   const [extractionErrors, setExtractionErrors] = useState<ExtractionErrorResponse[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
@@ -102,7 +107,35 @@ export default function App() {
     void refreshObservability();
     void refreshWorkspaceData();
     void refreshAnalytics();
+    void restoreAuthSession();
   }, []);
+
+  async function restoreAuthSession() {
+    const token = localStorage.getItem("vendorops_access_token");
+    if (!token) return;
+    try {
+      setAuthUser(await getMe(token));
+    } catch {
+      localStorage.removeItem("vendorops_access_token");
+      setAuthUser(null);
+    }
+  }
+
+  async function handleDemoLogin() {
+    setAuthError(null);
+    try {
+      const result = await login("admin@vendorops.ai", "VendorOpsDemo123!");
+      localStorage.setItem("vendorops_access_token", result.access_token);
+      setAuthUser(result.user);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Login failed.");
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("vendorops_access_token");
+    setAuthUser(null);
+  }
 
   async function refreshAnalytics() {
     try {
@@ -218,6 +251,15 @@ export default function App() {
         <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8">
           <section id="command-center" className="scroll-mt-6">
             <TopBar health={health} healthError={healthError} />
+          </section>
+
+          <section className="mt-6">
+            <SaaSIdentityPanel
+              authUser={authUser}
+              authError={authError}
+              onLogin={() => void handleDemoLogin()}
+              onLogout={handleLogout}
+            />
           </section>
 
           <section className="mt-6 grid scroll-mt-6 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -403,6 +445,76 @@ function MetricCard({
       <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-950">{value}</p>
       <p className="mt-2 text-xs font-medium text-ink-500">{change}</p>
     </article>
+  );
+}
+
+function SaaSIdentityPanel({
+  authUser,
+  authError,
+  onLogin,
+  onLogout,
+}: {
+  authUser: AuthUserResponse | null;
+  authError: string | null;
+  onLogin: () => void;
+  onLogout: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-cloud-200 bg-white p-5 shadow-soft sm:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-brand-700">SaaS foundation</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink-950">
+            Tenant, workspace, and RBAC context
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-500">
+            The platform now has seeded organization/workspace identity, password login, bearer
+            sessions, roles, permissions, and protected context APIs.
+          </p>
+        </div>
+        {authUser ? (
+          <button
+            className="rounded-lg border border-cloud-200 bg-white px-3 py-2 text-sm font-semibold text-ink-900 transition hover:bg-cloud-50"
+            onClick={onLogout}
+          >
+            Sign out
+          </button>
+        ) : (
+          <button
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-ink-900"
+            onClick={onLogin}
+          >
+            <LockKeyhole className="h-4 w-4" />
+            Sign in demo owner
+          </button>
+        )}
+      </div>
+
+      {authError ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {authError}
+        </div>
+      ) : null}
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <InfoTile label="Organization" value={authUser?.organization.name ?? "Not signed in"} />
+        <InfoTile label="Workspace" value={authUser?.workspace.name ?? "No workspace context"} />
+        <InfoTile label="Role" value={authUser?.workspace.role ?? "Unauthenticated"} />
+      </div>
+
+      {authUser ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {authUser.permissions.map((permission) => (
+            <span
+              key={permission}
+              className="rounded-full border border-brand-500/15 bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-700"
+            >
+              {permission}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

@@ -86,6 +86,7 @@ Phase 10 is complete:
 - Executive dashboard added for throughput, validation risk, extraction confidence, retries, blocked jobs, cost, and report usage.
 - GitHub Actions CI added for backend lint/tests, frontend build, and Docker Compose validation.
 - Production SaaS architecture documented in `docs/PRODUCTION_SAAS_ARCHITECTURE.md`.
+- Authentication, seeded demo organization/workspace, bearer sessions, RBAC permissions, and SaaS identity dashboard panel added.
 
 ## Local Setup
 
@@ -149,6 +150,8 @@ GET  /v1/reports/{report_id}/download
 GET  /v1/audit-logs
 GET  /v1/extraction-errors
 GET  /v1/analytics/dashboard
+POST /v1/auth/login
+GET  /v1/auth/me
 ```
 
 ## Run The API

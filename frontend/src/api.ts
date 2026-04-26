@@ -136,6 +136,32 @@ export type AnalyticsDashboardResponse = {
   analyst_notes: string[];
 };
 
+export type AuthUserResponse = {
+  user_id: string;
+  email: string;
+  full_name: string;
+  organization: {
+    organization_id: string;
+    name: string;
+    slug: string;
+    plan: string;
+  };
+  workspace: {
+    workspace_id: string;
+    name: string;
+    slug: string;
+    role: string;
+  };
+  permissions: string[];
+};
+
+export type LoginResponse = {
+  access_token: string;
+  token_type: "bearer";
+  expires_at: string;
+  user: AuthUserResponse;
+};
+
 export type AuditLogResponse = {
   audit_log_id: string;
   actor: string;
@@ -234,6 +260,22 @@ export async function getSummaryReport(reportId: string): Promise<SummaryReportR
 export async function getAnalyticsDashboard(): Promise<AnalyticsDashboardResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/analytics/dashboard`);
   return parseJsonResponse<AnalyticsDashboardResponse>(response);
+}
+
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return parseJsonResponse<LoginResponse>(response);
+}
+
+export async function getMe(accessToken: string): Promise<AuthUserResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/auth/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonResponse<AuthUserResponse>(response);
 }
 
 export async function getAuditLogs(limit = 8): Promise<AuditLogResponse[]> {

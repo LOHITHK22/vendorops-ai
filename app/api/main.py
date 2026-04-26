@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     analytics,
+    auth,
     files,
     health,
     jobs,
@@ -14,8 +15,9 @@ from app.api.routes import (
     reports,
     validation,
 )
+from app.auth.service import seed_default_identity
 from app.config.settings import get_settings
-from app.db.session import init_db
+from app.db.session import get_sessionmaker, init_db
 from app.observability.logging import configure_logging
 from app.observability.middleware import RequestLoggingMiddleware
 
@@ -24,6 +26,9 @@ from app.observability.middleware import RequestLoggingMiddleware
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     await init_db(settings.database_url)
+    sessionmaker = get_sessionmaker(settings.database_url)
+    async with sessionmaker() as session:
+        await seed_default_identity(session, settings)
     yield
 
 
@@ -47,6 +52,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestLoggingMiddleware)
 
     app.include_router(health.router)
+    app.include_router(auth.router, prefix=settings.api_prefix)
     app.include_router(files.router, prefix=settings.api_prefix)
     app.include_router(jobs.router, prefix=settings.api_prefix)
     app.include_router(records.router, prefix=settings.api_prefix)

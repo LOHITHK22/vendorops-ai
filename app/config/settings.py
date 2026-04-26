@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     extraction_retry_base_seconds: float = Field(default=0.4, ge=0.0, le=10.0)
     llm_input_cost_per_1k_tokens: float = Field(default=0.0004, ge=0.0)
     llm_output_cost_per_1k_tokens: float = Field(default=0.0016, ge=0.0)
+    auth_token_ttl_hours: int = Field(default=12, ge=1, le=720)
+    demo_admin_email: str = "admin@vendorops.ai"
+    demo_admin_password: str = "VendorOpsDemo123!"
+    default_organization_name: str = "VendorOps Demo Co"
+    default_workspace_name: str = "Finance Operations"
     cors_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
 
     @field_validator("cors_origins", mode="before")

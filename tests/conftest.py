@@ -8,8 +8,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.main import app
+from app.auth.service import seed_default_identity
 from app.config.settings import Settings, get_settings
-from app.db.session import init_db
+from app.db.session import get_sessionmaker, init_db
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,13 @@ def test_app() -> Iterator[TestAppContext]:
         openai_api_key=None,
         extraction_retry_base_seconds=0,
     )
+    sessionmaker = get_sessionmaker(database_url)
+
+    async def seed_identity() -> None:
+        async with sessionmaker() as session:
+            await seed_default_identity(session, settings)
+
+    asyncio.run(seed_identity())
 
     def override_settings() -> Settings:
         return settings
