@@ -7,6 +7,8 @@ import {
   Clock3,
   Database,
   DollarSign,
+  Eye,
+  EyeOff,
   FileJson2,
   FileText,
   FileWarning,
@@ -460,7 +462,8 @@ function SaaSIdentityPanel({
   onLogout: () => void;
 }) {
   const [email, setEmail] = useState("admin@vendorops.ai");
-  const [password, setPassword] = useState("VendorOpsDemo123!");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -512,12 +515,24 @@ function SaaSIdentityPanel({
           </label>
           <label className="text-sm font-medium text-ink-700">
             Password
-            <input
-              className="mt-2 w-full rounded-lg border border-cloud-200 bg-white px-3 py-2 text-sm text-ink-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
+            <div className="mt-2 flex rounded-lg border border-cloud-200 bg-white focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10">
+              <input
+                className="min-w-0 flex-1 rounded-l-lg bg-transparent px-3 py-2 text-sm text-ink-900 outline-none"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                placeholder="Enter password"
+                autoComplete="current-password"
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="grid w-11 place-items-center rounded-r-lg text-ink-500 transition hover:bg-cloud-50 hover:text-ink-900"
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </label>
           <div className="flex items-end">
             <button className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink-950 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-ink-900">
@@ -526,8 +541,8 @@ function SaaSIdentityPanel({
             </button>
           </div>
           <p className="text-xs leading-5 text-ink-500 lg:col-span-3">
-            Demo owner credentials are prefilled for local testing. Replace them in `.env` before
-            a real deployment.
+            Demo owner email is prefilled for local testing. Keep the demo password private and
+            replace seeded credentials in `.env` before a real deployment.
           </p>
         </form>
       ) : null}
