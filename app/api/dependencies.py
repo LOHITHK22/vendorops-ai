@@ -4,7 +4,13 @@ from uuid import UUID
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.service import AuthContext, AuthenticationError, get_context_from_token
+from app.auth.service import (
+    AuthContext,
+    AuthenticationError,
+    AuthorizationError,
+    get_context_from_token,
+    require_permission,
+)
 from app.db.session import get_db_session
 
 
@@ -52,3 +58,19 @@ async def get_optional_context(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
         ) from exc
+
+
+def require_permission_dependency(permission: str):
+    async def dependency(
+        context: Annotated[AuthContext, Depends(get_current_context)],
+    ) -> AuthContext:
+        try:
+            require_permission(context, permission)
+        except AuthorizationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(exc),
+            ) from exc
+        return context
+
+    return dependency

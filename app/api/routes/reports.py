@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_optional_context, tenant_ids
+from app.api.dependencies import require_permission_dependency, tenant_ids
 from app.api.schemas import CreateReportRequest, GeneratedReportResponse
 from app.auth.service import AuthContext
 from app.config.settings import Settings, get_settings
@@ -40,7 +40,7 @@ async def create_report(
     request: CreateReportRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("report:write"))],
 ) -> GeneratedReportResponse:
     organization_id, workspace_id = tenant_ids(context)
     records = await list_extracted_records(
@@ -81,7 +81,7 @@ async def create_report(
 @router.get("", response_model=list[GeneratedReportResponse])
 async def get_reports(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("report:read"))],
 ) -> list[GeneratedReportResponse]:
     organization_id, workspace_id = tenant_ids(context)
     reports = await list_generated_reports(
@@ -96,7 +96,7 @@ async def get_reports(
 async def get_report(
     report_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("report:read"))],
 ) -> GeneratedReportResponse:
     organization_id, workspace_id = tenant_ids(context)
     report = await get_generated_report(
@@ -117,7 +117,7 @@ async def get_report(
 async def download_report(
     report_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("report:read"))],
 ) -> FileResponse:
     organization_id, workspace_id = tenant_ids(context)
     report = await get_generated_report(

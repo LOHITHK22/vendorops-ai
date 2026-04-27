@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_optional_context, tenant_ids
+from app.api.dependencies import require_permission_dependency, tenant_ids
 from app.api.schemas import ExtractedRecordResponse
 from app.auth.service import AuthContext
 from app.db.repositories import get_extracted_record, list_extracted_records
@@ -31,7 +31,7 @@ def to_record_response(record) -> ExtractedRecordResponse:
 @router.get("", response_model=list[ExtractedRecordResponse])
 async def list_records(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("analytics:read"))],
 ) -> list[ExtractedRecordResponse]:
     organization_id, workspace_id = tenant_ids(context)
     records = await list_extracted_records(
@@ -46,7 +46,7 @@ async def list_records(
 async def get_record(
     record_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("analytics:read"))],
 ) -> ExtractedRecordResponse:
     organization_id, workspace_id = tenant_ids(context)
     record = await get_extracted_record(

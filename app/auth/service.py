@@ -43,12 +43,13 @@ ROLE_PERMISSIONS = {
     "owner": [
         "workspace:admin",
         "pipeline:write",
+        "report:read",
         "report:write",
         "analytics:read",
         "audit:read",
     ],
-    "admin": ["pipeline:write", "report:write", "analytics:read", "audit:read"],
-    "analyst": ["pipeline:write", "report:write", "analytics:read"],
+    "admin": ["pipeline:write", "report:read", "report:write", "analytics:read", "audit:read"],
+    "analyst": ["pipeline:write", "report:read", "report:write", "analytics:read"],
     "viewer": ["analytics:read", "report:read"],
 }
 

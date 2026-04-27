@@ -11,6 +11,7 @@ from app.db.models import ExtractedRecord, ProcessingJob
 from app.db.session import get_sessionmaker, init_db
 from app.extraction.extractor import MockExtractor
 from app.parsers.dispatcher import parse_file
+from tests.helpers import auth_headers, seed_demo_identity
 
 
 def create_test_client() -> tuple[TestClient, Settings]:
@@ -30,6 +31,7 @@ def create_test_client() -> tuple[TestClient, Settings]:
         return settings
 
     app.dependency_overrides[get_settings] = override_settings
+    seed_demo_identity(database_url, settings)
     return TestClient(app), settings
 
 
@@ -55,8 +57,10 @@ def test_mock_extractor_returns_schema_valid_record() -> None:
 def test_extract_endpoint_persists_record_and_job() -> None:
     client, settings = create_test_client()
     try:
+        headers = auth_headers(client, settings)
         upload_response = client.post(
             "/v1/files",
+            headers=headers,
             files={
                 "file": (
                     "invoice.txt",
@@ -68,7 +72,7 @@ def test_extract_endpoint_persists_record_and_job() -> None:
         assert upload_response.status_code == 201
         file_id = upload_response.json()["file_id"]
 
-        extraction_response = client.post(f"/v1/files/{file_id}/extract")
+        extraction_response = client.post(f"/v1/files/{file_id}/extract", headers=headers)
         assert extraction_response.status_code == 200
         payload = extraction_response.json()
 
@@ -79,7 +83,7 @@ def test_extract_endpoint_persists_record_and_job() -> None:
         assert payload["record"]["normalized_payload"]["total_amount"] == 199.0
         assert payload["validation_errors"] == []
 
-        records_response = client.get("/v1/records")
+        records_response = client.get("/v1/records", headers=headers)
         assert records_response.status_code == 200
         assert len(records_response.json()) == 1
 

@@ -11,6 +11,7 @@ from app.api.main import app
 from app.auth.service import seed_default_identity
 from app.config.settings import Settings, get_settings
 from app.db.session import get_sessionmaker, init_db
+from tests.helpers import auth_headers
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,9 @@ class TestAppContext:
     client: TestClient
     settings: Settings
     root: Path
+
+    def auth_headers(self) -> dict[str, str]:
+        return auth_headers(self.client, self.settings)
 
 
 @pytest.fixture

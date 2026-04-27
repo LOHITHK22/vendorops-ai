@@ -9,6 +9,7 @@ from app.api.main import app
 from app.config.settings import Settings, get_settings
 from app.db.models import ExtractedRecord, ProcessingJob
 from app.db.session import get_sessionmaker, init_db
+from tests.helpers import auth_headers, seed_demo_identity
 
 
 def create_test_client() -> tuple[TestClient, Settings]:
@@ -28,6 +29,7 @@ def create_test_client() -> tuple[TestClient, Settings]:
         return settings
 
     app.dependency_overrides[get_settings] = override_settings
+    seed_demo_identity(database_url, settings)
     return TestClient(app), settings
 
 
@@ -41,8 +43,10 @@ async def count_rows(database_url: str, model: type) -> int:
 def test_queued_job_runs_document_pipeline_once() -> None:
     client, settings = create_test_client()
     try:
+        headers = auth_headers(client, settings)
         upload_response = client.post(
             "/v1/files",
+            headers=headers,
             files={
                 "file": (
                     "invoice.txt",
@@ -56,13 +60,14 @@ def test_queued_job_runs_document_pipeline_once() -> None:
 
         job_response = client.post(
             "/v1/jobs",
+            headers=headers,
             json={"file_id": file_id, "pipeline": "document_extraction"},
         )
         assert job_response.status_code == 201
         job_id = job_response.json()["job_id"]
         assert job_response.json()["status"] == "queued"
 
-        run_response = client.post(f"/v1/jobs/{job_id}/run")
+        run_response = client.post(f"/v1/jobs/{job_id}/run", headers=headers)
         assert run_response.status_code == 200
         payload = run_response.json()
 
@@ -75,8 +80,7 @@ def test_queued_job_runs_document_pipeline_once() -> None:
         assert asyncio.run(count_rows(settings.database_url, ProcessingJob)) == 1
         assert asyncio.run(count_rows(settings.database_url, ExtractedRecord)) == 1
 
-        rerun_response = client.post(f"/v1/jobs/{job_id}/run")
+        rerun_response = client.post(f"/v1/jobs/{job_id}/run", headers=headers)
         assert rerun_response.status_code == 409
     finally:
         app.dependency_overrides.clear()
-

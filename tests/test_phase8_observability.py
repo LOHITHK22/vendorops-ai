@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.api.main import app
 from app.config.settings import Settings, get_settings
 from app.db.session import init_db
+from tests.helpers import auth_headers, seed_demo_identity
 
 
 @pytest.fixture
@@ -21,16 +22,19 @@ def client() -> Iterator[TestClient]:
     database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
     asyncio.run(init_db(database_url))
 
+    settings = Settings(
+        local_storage_dir=storage_dir,
+        reports_dir=reports_dir,
+        database_url=database_url,
+        openai_api_key=None,
+        extraction_retry_base_seconds=0,
+    )
+
     def override_settings() -> Settings:
-        return Settings(
-            local_storage_dir=storage_dir,
-            reports_dir=reports_dir,
-            database_url=database_url,
-            openai_api_key=None,
-            extraction_retry_base_seconds=0,
-        )
+        return settings
 
     app.dependency_overrides[get_settings] = override_settings
+    seed_demo_identity(database_url, settings)
     with TestClient(app) as test_client:
         yield test_client
 
@@ -45,8 +49,10 @@ def test_request_logging_middleware_returns_request_id(client: TestClient) -> No
 
 
 def test_failed_pipeline_persists_error_and_audit_events(client: TestClient) -> None:
+    headers = auth_headers(client, app.dependency_overrides[get_settings]())
     upload_response = client.post(
         "/v1/files",
+        headers=headers,
         files={
             "file": (
                 "invoice.txt",
@@ -61,19 +67,20 @@ def test_failed_pipeline_persists_error_and_audit_events(client: TestClient) -> 
 
     job_response = client.post(
         "/v1/jobs",
+        headers=headers,
         json={"file_id": uploaded_file["file_id"], "pipeline": "document_extraction"},
     )
     assert job_response.status_code == 201
     job_id = job_response.json()["job_id"]
 
-    run_response = client.post(f"/v1/jobs/{job_id}/run")
+    run_response = client.post(f"/v1/jobs/{job_id}/run", headers=headers)
     assert run_response.status_code == 422
 
-    job_status_response = client.get(f"/v1/jobs/{job_id}")
+    job_status_response = client.get(f"/v1/jobs/{job_id}", headers=headers)
     assert job_status_response.status_code == 200
     assert job_status_response.json()["status"] == "failed"
 
-    errors_response = client.get("/v1/extraction-errors")
+    errors_response = client.get("/v1/extraction-errors", headers=headers)
     assert errors_response.status_code == 200
     errors = errors_response.json()
     assert len(errors) == 1
@@ -82,7 +89,7 @@ def test_failed_pipeline_persists_error_and_audit_events(client: TestClient) -> 
     assert errors[0]["stage"] == "parse"
     assert errors[0]["retryable"] is False
 
-    audit_response = client.get("/v1/audit-logs")
+    audit_response = client.get("/v1/audit-logs", headers=headers)
     assert audit_response.status_code == 200
     actions = {event["action"] for event in audit_response.json()}
     assert "pipeline.error_recorded" in actions

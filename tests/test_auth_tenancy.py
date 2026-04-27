@@ -1,7 +1,10 @@
 import asyncio
+from types import SimpleNamespace
 
+import pytest
 from sqlalchemy import select
 
+from app.auth.service import AuthorizationError, require_permission
 from app.db.models import ExtractedRecord, ProcessingJob, UploadedFile
 from app.db.session import get_sessionmaker
 from tests.conftest import TestAppContext
@@ -64,6 +67,27 @@ def test_login_rejects_bad_password(test_app: TestAppContext) -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_protected_business_endpoints_require_bearer_token(test_app: TestAppContext) -> None:
+    client = test_app.client
+
+    upload_response = client.post(
+        "/v1/files",
+        files={"file": ("invoice.txt", b"Invoice Number: INV-001", "text/plain")},
+    )
+    assert upload_response.status_code == 401
+
+    analytics_response = client.get("/v1/analytics/dashboard")
+    assert analytics_response.status_code == 401
+
+
+def test_role_permissions_block_unauthorized_actions() -> None:
+    viewer_context = SimpleNamespace(membership=SimpleNamespace(role="viewer"))
+
+    require_permission(viewer_context, "analytics:read")
+    with pytest.raises(AuthorizationError):
+        require_permission(viewer_context, "pipeline:write")
 
 
 async def get_first_row(database_url: str, model: type):

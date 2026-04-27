@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_optional_context, tenant_ids
+from app.api.dependencies import require_permission_dependency, tenant_ids
 from app.api.routes.records import to_record_response
 from app.api.routes.validation import to_validation_error_response
 from app.api.schemas import (
@@ -37,7 +37,7 @@ async def upload_file(
     file: Annotated[UploadFile, File(...)],
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
 ) -> UploadedFileResponse:
     try:
         stored_upload = await store_upload(file, settings.local_storage_dir)
@@ -73,7 +73,7 @@ async def upload_file(
 async def parse_uploaded_file(
     file_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
 ) -> ParsedDocumentResponse:
     organization_id, workspace_id = tenant_ids(context)
     uploaded_file = await get_uploaded_file(
@@ -104,7 +104,7 @@ async def extract_uploaded_file(
     file_id: UUID,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
 ) -> ExtractionRunResponse:
     organization_id, workspace_id = tenant_ids(context)
     try:

@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_optional_context, tenant_ids
+from app.api.dependencies import require_permission_dependency, tenant_ids
 from app.api.routes.records import to_record_response
 from app.api.routes.validation import to_validation_error_response
 from app.api.schemas import CreateJobRequest, ExtractionRunResponse, ProcessingJobResponse
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 async def create_job(
     request: CreateJobRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
 ) -> ProcessingJobResponse:
     organization_id, workspace_id = tenant_ids(context)
     file_record = await get_uploaded_file(
@@ -64,7 +64,7 @@ async def create_job(
 async def get_job(
     job_id: UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
 ) -> ProcessingJobResponse:
     organization_id, workspace_id = tenant_ids(context)
     job = await get_processing_job(
@@ -95,7 +95,7 @@ async def run_job(
     job_id: UUID,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    context: Annotated[AuthContext | None, Depends(get_optional_context)],
+    context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
 ) -> ExtractionRunResponse:
     organization_id, workspace_id = tenant_ids(context)
     job = await get_processing_job(

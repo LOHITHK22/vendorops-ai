@@ -9,6 +9,7 @@ from app.config.settings import Settings, get_settings
 from app.db.session import init_db
 from app.extraction.schemas import ExtractedBusinessRecord, ExtractedRecordType
 from app.validation.rules import validate_extracted_record
+from tests.helpers import auth_headers, seed_demo_identity
 
 
 def create_test_client() -> TestClient:
@@ -28,6 +29,7 @@ def create_test_client() -> TestClient:
         return settings
 
     app.dependency_overrides[get_settings] = override_settings
+    seed_demo_identity(database_url, settings)
     return TestClient(app)
 
 
@@ -49,8 +51,10 @@ def test_validation_rules_flag_missing_invoice_fields() -> None:
 def test_validation_errors_endpoint_lists_persisted_findings() -> None:
     client = create_test_client()
     try:
+        headers = auth_headers(client, app.dependency_overrides[get_settings]())
         upload_response = client.post(
             "/v1/files",
+            headers=headers,
             files={
                 "file": (
                     "ambiguous.txt",
@@ -62,19 +66,22 @@ def test_validation_errors_endpoint_lists_persisted_findings() -> None:
         assert upload_response.status_code == 201
         file_id = upload_response.json()["file_id"]
 
-        extraction_response = client.post(f"/v1/files/{file_id}/extract")
+        extraction_response = client.post(f"/v1/files/{file_id}/extract", headers=headers)
         assert extraction_response.status_code == 200
         validation_errors = extraction_response.json()["validation_errors"]
 
         assert validation_errors
         assert any(error["error_type"] == "low_confidence" for error in validation_errors)
 
-        list_response = client.get("/v1/validation-errors")
+        list_response = client.get("/v1/validation-errors", headers=headers)
         assert list_response.status_code == 200
         assert len(list_response.json()) == len(validation_errors)
 
         record_id = extraction_response.json()["record"]["record_id"]
-        record_response = client.get(f"/v1/validation-errors/records/{record_id}")
+        record_response = client.get(
+            f"/v1/validation-errors/records/{record_id}",
+            headers=headers,
+        )
         assert record_response.status_code == 200
         assert len(record_response.json()) == len(validation_errors)
     finally:
