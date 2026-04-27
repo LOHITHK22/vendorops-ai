@@ -87,6 +87,9 @@ Phase 10 is complete:
 - GitHub Actions CI added for backend lint/tests, frontend build, and Docker Compose validation.
 - Production SaaS architecture documented in `docs/PRODUCTION_SAAS_ARCHITECTURE.md`.
 - Authentication, seeded demo organization/workspace, bearer sessions, RBAC permissions, and SaaS identity dashboard panel added.
+- Strict authenticated RBAC is enforced on business APIs.
+- Alembic migrations added for tracked schema evolution.
+- Docker Compose now runs the application against PostgreSQL with persistent database storage.
 
 ## Local Setup
 
@@ -125,6 +128,12 @@ On Windows PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
+```
+
+Run database migrations:
+
+```powershell
+.\scripts\run_migrations.ps1
 ```
 
 ## Planned API Examples
@@ -243,6 +252,8 @@ cd "C:\Users\Princ\Documents\Codex\2026-04-24\VendorOps AI"
 docker compose up --build
 ```
 
+The Compose stack starts PostgreSQL, runs Alembic migrations, then starts the API and frontend.
+
 Open the dashboard:
 
 ```text
@@ -271,10 +282,20 @@ Health check:
 curl http://127.0.0.1:8000/health
 ```
 
+Login and save a bearer token:
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@vendorops.ai","password":"VendorOpsDemo123!"}' \
+  | python -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+```
+
 Upload a file:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/files \
+  -H "Authorization: Bearer $TOKEN" \
   -F "file=@tests/fixtures/sample_invoice.txt"
 ```
 
@@ -282,6 +303,7 @@ Create a job:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/jobs \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"file_id":"<FILE_ID>","pipeline":"document_extraction"}'
 ```
@@ -289,43 +311,46 @@ curl -X POST http://127.0.0.1:8000/v1/jobs \
 Check job status:
 
 ```bash
-curl http://127.0.0.1:8000/v1/jobs/<JOB_ID>
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/v1/jobs/<JOB_ID>
 ```
 
 Parse an uploaded file:
 
 ```bash
-curl http://127.0.0.1:8000/v1/files/<FILE_ID>/parsed
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/v1/files/<FILE_ID>/parsed
 ```
 
 Run structured extraction:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/files/<FILE_ID>/extract
+curl -X POST http://127.0.0.1:8000/v1/files/<FILE_ID>/extract \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 List extracted records:
 
 ```bash
-curl http://127.0.0.1:8000/v1/records
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/v1/records
 ```
 
 List validation findings:
 
 ```bash
-curl http://127.0.0.1:8000/v1/validation-errors
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/v1/validation-errors
 ```
 
 Run a queued job:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/jobs/<JOB_ID>/run
+curl -X POST http://127.0.0.1:8000/v1/jobs/<JOB_ID>/run \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 Generate a JSON summary report:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/reports \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"report_type":"summary","format":"json"}'
 ```
@@ -334,6 +359,7 @@ Generate a CSV records report:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/reports \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"report_type":"records","format":"csv"}'
 ```
@@ -367,7 +393,17 @@ The MVP defaults to SQLite:
 DATABASE_URL=sqlite+aiosqlite:///./vendorops.db
 ```
 
-The database layer uses SQLAlchemy async models and is designed so the URL can later be changed to PostgreSQL with minimal application-code changes.
+Docker and production-style deployments use PostgreSQL:
+
+```env
+DATABASE_URL=postgresql+asyncpg://vendorops:vendorops@postgres:5432/vendorops
+```
+
+Schema changes are tracked with Alembic migrations:
+
+```powershell
+.\scripts\run_migrations.ps1
+```
 
 Current tables:
 

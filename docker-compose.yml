@@ -1,4 +1,21 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vendorops
+      POSTGRES_USER: vendorops
+      POSTGRES_PASSWORD: vendorops
+    ports:
+      - "5432:5432"
+    volumes:
+      - vendorops_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vendorops -d vendorops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   backend:
     build:
       context: .
@@ -8,7 +25,7 @@ services:
       APP_ENV: container
       APP_DEBUG: "false"
       API_PREFIX: /v1
-      DATABASE_URL: sqlite+aiosqlite:////app/data/vendorops.db
+      DATABASE_URL: postgresql+asyncpg://vendorops:vendorops@postgres:5432/vendorops
       LOCAL_STORAGE_DIR: /app/storage
       REPORTS_DIR: /app/reports_out
       LOG_LEVEL: INFO
@@ -20,8 +37,10 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - vendorops_data:/app/data
       - vendorops_storage:/app/storage
       - vendorops_reports:/app/reports_out
     healthcheck:
@@ -51,6 +70,6 @@ services:
       - "5173:80"
 
 volumes:
-  vendorops_data:
+  vendorops_postgres:
   vendorops_storage:
   vendorops_reports:

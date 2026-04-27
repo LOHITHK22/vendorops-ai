@@ -12,7 +12,11 @@ def test_backend_dockerfile_defines_api_runtime() -> None:
     assert "python -m pip install ." in contents
     assert "uvicorn" in contents
     assert "HEALTHCHECK" in contents
-    assert "DATABASE_URL=sqlite+aiosqlite:////app/data/vendorops.db" in contents
+    assert (
+        "DATABASE_URL=postgresql+asyncpg://vendorops:vendorops@postgres:5432/vendorops"
+        in contents
+    )
+    assert "alembic upgrade head" in contents
 
 
 def test_frontend_dockerfile_and_nginx_proxy_exist() -> None:
@@ -39,7 +43,9 @@ def test_docker_compose_defines_backend_frontend_and_volumes() -> None:
     contents = compose_file.read_text(encoding="utf-8")
     assert "backend:" in contents
     assert "frontend:" in contents
-    assert "vendorops_data:" in contents
+    assert "postgres:" in contents
+    assert "vendorops_postgres:" in contents
     assert "vendorops_storage:" in contents
     assert "vendorops_reports:" in contents
+    assert "postgresql+asyncpg://vendorops:vendorops@postgres:5432/vendorops" in contents
     assert "OPENAI_API_KEY: ${OPENAI_API_KEY:-}" in contents

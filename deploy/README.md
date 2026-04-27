@@ -26,9 +26,12 @@ http://127.0.0.1:8000/docs
 
 Compose creates persistent Docker volumes for:
 
-- SQLite database: `/app/data/vendorops.db`
+- PostgreSQL data: `vendorops_postgres`
 - Uploaded files: `/app/storage`
 - Generated reports: `/app/reports_out`
+
+The backend runs `alembic upgrade head` before starting Uvicorn, so container startup applies
+tracked database migrations automatically.
 
 ## LLM Configuration
 
@@ -59,4 +62,5 @@ docker compose up --build
 - Store secrets in the deployment platform, not in `.env` files committed to Git.
 - Use managed PostgreSQL before multi-user production rollout.
 - Replace local Docker volumes with managed object storage for uploaded documents and reports.
-- Add authentication before exposing upload and report APIs publicly.
+- Authentication and RBAC are enabled for business APIs; rotate demo credentials before any
+  public deployment.

@@ -12,5 +12,5 @@ if (-not (Test-Path $PythonPath)) {
 }
 
 Set-Location $ProjectRoot
+& $PythonPath -m alembic upgrade head
 & $PythonPath -m uvicorn app.api.main:app --reload --host 127.0.0.1 --port $Port
-
