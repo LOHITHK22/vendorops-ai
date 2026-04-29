@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/v1"
 
     database_url: str = "sqlite+aiosqlite:///./vendorops.db"
+    storage_backend: str = Field(default="local", pattern="^(local|s3|azure|gcs)$")
+    max_upload_size_mb: int = Field(default=25, ge=1, le=250)
     local_storage_dir: Path = Field(default=Path("./storage"))
     reports_dir: Path = Field(default=Path("./reports_out"))
 

@@ -90,6 +90,8 @@ Phase 10 is complete:
 - Strict authenticated RBAC is enforced on business APIs.
 - Alembic migrations added for tracked schema evolution.
 - Docker Compose now runs the application against PostgreSQL with persistent database storage.
+- Storage abstraction added for uploads and generated report artifacts.
+- Upload filename sanitization and configurable upload size limits added.
 
 ## Local Setup
 
@@ -429,6 +431,22 @@ Supported parsers:
 - CSV: header/row extraction using Python's standard `csv` module.
 - EML: subject/from/to/date headers and plain-text body extraction.
 - PDF: text extraction using PyMuPDF.
+
+## Storage Layer
+
+VendorOps AI stores uploaded source files and generated reports through a storage abstraction.
+The current implementation is local disk storage, configured with:
+
+```env
+STORAGE_BACKEND=local
+MAX_UPLOAD_SIZE_MB=25
+LOCAL_STORAGE_DIR=./storage
+REPORTS_DIR=./reports_out
+```
+
+The application code now talks to an object-storage interface instead of direct filesystem writes.
+That keeps the next production step clear: adding S3, Azure Blob, or GCS adapters without changing
+the API, pipeline, parser, or reporting layers.
 
 ## LLM Extraction
 

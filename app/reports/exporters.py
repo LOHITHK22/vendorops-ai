@@ -1,20 +1,41 @@
 import csv
 import json
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-
-def write_json_report(reports_dir: Path, payload: dict[str, Any]) -> Path:
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    path = reports_dir / f"report-{uuid4()}.json"
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    return path
+from app.storage.backends import ObjectStorageBackend
 
 
-def write_csv_report(reports_dir: Path, rows: list[dict[str, Any]]) -> Path:
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    path = reports_dir / f"report-{uuid4()}.csv"
+@dataclass(frozen=True)
+class StoredReportArtifact:
+    uri: str
+    filename: str
+    content_type: str
+
+
+def write_json_report(
+    storage: ObjectStorageBackend,
+    payload: dict[str, Any],
+) -> StoredReportArtifact:
+    filename = f"report-{uuid4()}.json"
+    stored_object = storage.put_bytes(
+        key=f"reports/{filename}",
+        content=json.dumps(payload, indent=2).encode("utf-8"),
+        content_type="application/json",
+    )
+    return StoredReportArtifact(
+        uri=stored_object.uri,
+        filename=filename,
+        content_type=stored_object.content_type,
+    )
+
+
+def write_csv_report(
+    storage: ObjectStorageBackend,
+    rows: list[dict[str, Any]],
+) -> StoredReportArtifact:
+    filename = f"report-{uuid4()}.csv"
     fieldnames = [
         "record_id",
         "file_id",
@@ -27,9 +48,26 @@ def write_csv_report(reports_dir: Path, rows: list[dict[str, Any]]) -> Path:
         "currency",
         "created_at",
     ]
-    with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-    return path
+    buffer = _CsvStringBuffer()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+    stored_object = storage.put_bytes(
+        key=f"reports/{filename}",
+        content=buffer.value.encode("utf-8"),
+        content_type="text/csv",
+    )
+    return StoredReportArtifact(
+        uri=stored_object.uri,
+        filename=filename,
+        content_type=stored_object.content_type,
+    )
 
+
+class _CsvStringBuffer:
+    def __init__(self) -> None:
+        self.value = ""
+
+    def write(self, value: str) -> int:
+        self.value += value
+        return len(value)

@@ -39,6 +39,8 @@ frontend/.vite/
 *.sqlite
 *.sqlite3
 storage/
+!app/storage/
+!app/storage/*.py
 reports_out/
 uploads/
 

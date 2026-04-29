@@ -24,6 +24,7 @@ from app.ingestion.storage import store_upload
 from app.parsers.dispatcher import parse_file
 from app.parsers.models import ParserError
 from app.pipeline.document_pipeline import PipelineError, PipelineInputError, run_document_pipeline
+from app.storage.factory import get_object_storage
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -40,7 +41,11 @@ async def upload_file(
     context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
 ) -> UploadedFileResponse:
     try:
-        stored_upload = await store_upload(file, settings.local_storage_dir)
+        stored_upload = await store_upload(
+            file,
+            get_object_storage(settings),
+            max_size_bytes=settings.max_upload_size_mb * 1024 * 1024,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -52,10 +57,10 @@ async def upload_file(
         workspace_id=workspace_id,
         original_filename=stored_upload.original_filename,
         content_type=stored_upload.content_type,
-        file_type=stored_upload.storage_path.suffix.lower().lstrip("."),
+        file_type=stored_upload.original_filename.rsplit(".", 1)[-1].lower(),
         size_bytes=stored_upload.size_bytes,
         sha256_hash=stored_upload.sha256_hash,
-        storage_path=str(stored_upload.storage_path),
+        storage_path=stored_upload.storage_path,
     )
 
     return UploadedFileResponse(

@@ -1,9 +1,8 @@
-from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission_dependency, tenant_ids
@@ -20,6 +19,8 @@ from app.db.repositories import (
 from app.db.session import get_db_session
 from app.reports.builders import build_records_csv_rows, build_summary_report
 from app.reports.exporters import write_csv_report, write_json_report
+from app.storage.backends import StorageError
+from app.storage.factory import get_report_storage
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -43,6 +44,7 @@ async def create_report(
     context: Annotated[AuthContext, Depends(require_permission_dependency("report:write"))],
 ) -> GeneratedReportResponse:
     organization_id, workspace_id = tenant_ids(context)
+    storage = get_report_storage(settings)
     records = await list_extracted_records(
         session,
         organization_id=organization_id,
@@ -57,23 +59,27 @@ async def create_report(
     if request.report_type == "summary":
         payload = build_summary_report(records, validation_errors)
         if request.format == "json":
-            storage_path = write_json_report(settings.reports_dir, payload)
+            artifact = write_json_report(storage, payload)
         else:
-            storage_path = write_csv_report(settings.reports_dir, payload["records"])
+            artifact = write_csv_report(storage, payload["records"])
     else:
         rows = build_records_csv_rows(records)
         if request.format == "json":
-            storage_path = write_json_report(settings.reports_dir, {"records": rows})
+            artifact = write_json_report(storage, {"records": rows})
         else:
-            storage_path = write_csv_report(settings.reports_dir, rows)
+            artifact = write_csv_report(storage, rows)
 
     report = await create_generated_report(
         session,
         report_type=request.report_type,
         organization_id=organization_id,
         workspace_id=workspace_id,
-        parameters={"format": request.format},
-        storage_path=str(storage_path),
+        parameters={
+            "format": request.format,
+            "filename": artifact.filename,
+            "content_type": artifact.content_type,
+        },
+        storage_path=artifact.uri,
     )
     return to_report_response(report)
 
@@ -116,9 +122,10 @@ async def get_report(
 @router.get("/{report_id}/download")
 async def download_report(
     report_id: UUID,
+    settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     context: Annotated[AuthContext, Depends(require_permission_dependency("report:read"))],
-) -> FileResponse:
+) -> Response:
     organization_id, workspace_id = tenant_ids(context)
     report = await get_generated_report(
         session,
@@ -131,9 +138,26 @@ async def download_report(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Report '{report_id}' was not found.",
         )
-    if not report.storage_path or not Path(report.storage_path).exists():
+    if not report.storage_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Report file for '{report_id}' was not found.",
         )
-    return FileResponse(path=report.storage_path, filename=Path(report.storage_path).name)
+    storage = get_report_storage(settings)
+    try:
+        if not storage.exists(report.storage_path):
+            raise StorageError(f"Report file for '{report_id}' was not found.")
+        content = storage.read_bytes(report.storage_path)
+    except StorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    filename = str(report.parameters.get("filename") or f"report-{report.id}")
+    content_type = str(report.parameters.get("content_type") or "application/octet-stream")
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
