@@ -48,11 +48,13 @@ import {
   getAnalyticsDashboard,
   getAuditLogs,
   getExtractionErrors,
+  getJob,
   getRecords,
   getReportDownloadUrl,
   getReports,
   getHealth,
   getSummaryReport,
+  getValidationErrorsForRecord,
   getMe,
   login,
   parseFile,
@@ -218,15 +220,26 @@ export default function App() {
     try {
       const uploaded = await uploadFile(selectedFile);
       setUploadedFile(uploaded);
-      const [extraction, parsed] = await Promise.all([
+      const [queuedJob, parsed] = await Promise.all([
         extractFile(uploaded.file_id),
         parseFile(uploaded.file_id),
       ]);
-      setJob(extraction.job);
-      setExtractedRecord(extraction.record);
-      setRecords((currentRecords) => [extraction.record, ...currentRecords]);
-      setValidationErrors(extraction.validation_errors);
+      setJob(queuedJob);
       setParsedDocument(parsed);
+      const completedJob = await waitForJobCompletion(queuedJob.job_id);
+      if (completedJob.status === "failed") {
+        throw new Error(completedJob.error_message ?? "Pipeline job failed.");
+      }
+
+      const latestRecords = await getRecords();
+      const currentRecord =
+        latestRecords.find((record) => record.job_id === completedJob.job_id) ?? null;
+      if (!currentRecord) {
+        throw new Error("Pipeline completed but no extracted record was found.");
+      }
+      setRecords(latestRecords);
+      setExtractedRecord(currentRecord);
+      setValidationErrors(await getValidationErrorsForRecord(currentRecord.record_id));
       setUploadState("uploaded");
       void refreshObservability();
       void refreshWorkspaceData();
@@ -236,6 +249,20 @@ export default function App() {
       setFormError(error instanceof Error ? error.message : "Upload failed.");
       void refreshObservability();
     }
+  }
+
+  async function waitForJobCompletion(jobId: string): Promise<ProcessingJobResponse> {
+    let latestJob = await getJob(jobId);
+    setJob(latestJob);
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      if (latestJob.status === "completed" || latestJob.status === "failed") {
+        return latestJob;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 750));
+      latestJob = await getJob(jobId);
+      setJob(latestJob);
+    }
+    throw new Error("Pipeline job is still running. Check the Jobs panel in a moment.");
   }
 
   function handleNavigate(sectionId: SectionId) {

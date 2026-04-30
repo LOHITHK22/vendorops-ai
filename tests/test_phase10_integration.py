@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from tests.conftest import TestAppContext
+from tests.helpers import wait_for_job
 
 
 def test_full_api_flow_from_upload_to_report_and_audit(test_app: TestAppContext) -> None:
@@ -26,24 +27,28 @@ def test_full_api_flow_from_upload_to_report_and_audit(test_app: TestAppContext)
     assert "Phase Ten Systems" in parse_response.json()["text"]
 
     extract_response = client.post(f"/v1/files/{uploaded_file['file_id']}/extract", headers=headers)
-    assert extract_response.status_code == 200
-    extraction = extract_response.json()
-    assert extraction["job"]["status"] == "completed"
-    assert extraction["record"]["vendor_name"] == "Phase Ten Systems"
-    assert extraction["record"]["external_reference"] == "INV-1010"
-    assert extraction["record"]["normalized_payload"]["total_amount"] == 1010.25
-    assert extraction["validation_errors"] == []
+    assert extract_response.status_code == 202
+    job = wait_for_job(client, extract_response.json()["job_id"], headers)
+    assert job["status"] == "completed"
 
     records_response = client.get("/v1/records", headers=headers)
     assert records_response.status_code == 200
     assert len(records_response.json()) == 1
+    extraction = records_response.json()[0]
+    assert extraction["vendor_name"] == "Phase Ten Systems"
+    assert extraction["external_reference"] == "INV-1010"
+    assert extraction["normalized_payload"]["total_amount"] == 1010.25
 
-    record_response = client.get(
-        f"/v1/records/{extraction['record']['record_id']}",
+    validation_response = client.get(
+        f"/v1/validation-errors/records/{extraction['record_id']}",
         headers=headers,
     )
+    assert validation_response.status_code == 200
+    assert validation_response.json() == []
+
+    record_response = client.get(f"/v1/records/{extraction['record_id']}", headers=headers)
     assert record_response.status_code == 200
-    assert record_response.json()["record_id"] == extraction["record"]["record_id"]
+    assert record_response.json()["record_id"] == extraction["record_id"]
 
     report_response = client.post(
         "/v1/reports",

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.api.main import app
 from app.config.settings import Settings, get_settings
 from app.db.session import init_db
-from tests.helpers import auth_headers, seed_demo_identity
+from tests.helpers import auth_headers, seed_demo_identity, wait_for_job
 
 
 @pytest.fixture
@@ -74,11 +74,10 @@ def test_failed_pipeline_persists_error_and_audit_events(client: TestClient) -> 
     job_id = job_response.json()["job_id"]
 
     run_response = client.post(f"/v1/jobs/{job_id}/run", headers=headers)
-    assert run_response.status_code == 422
+    assert run_response.status_code == 202
 
-    job_status_response = client.get(f"/v1/jobs/{job_id}", headers=headers)
-    assert job_status_response.status_code == 200
-    assert job_status_response.json()["status"] == "failed"
+    job_status = wait_for_job(client, job_id, headers, expected_status="failed")
+    assert job_status["status"] == "failed"
 
     errors_response = client.get("/v1/extraction-errors", headers=headers)
     assert errors_response.status_code == 200

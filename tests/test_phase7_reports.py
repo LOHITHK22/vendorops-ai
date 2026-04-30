@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.api.main import app
 from app.config.settings import Settings, get_settings
 from app.db.session import init_db
-from tests.helpers import auth_headers, seed_demo_identity
+from tests.helpers import auth_headers, seed_demo_identity, wait_for_job
 
 
 def create_test_client() -> TestClient:
@@ -48,7 +48,8 @@ def seed_extracted_record(client: TestClient, headers: dict[str, str]) -> None:
     assert upload_response.status_code == 201
     file_id = upload_response.json()["file_id"]
     extraction_response = client.post(f"/v1/files/{file_id}/extract", headers=headers)
-    assert extraction_response.status_code == 200
+    assert extraction_response.status_code == 202
+    wait_for_job(client, extraction_response.json()["job_id"], headers)
 
 
 def test_generate_json_and_csv_reports() -> None:

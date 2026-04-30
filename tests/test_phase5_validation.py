@@ -9,7 +9,7 @@ from app.config.settings import Settings, get_settings
 from app.db.session import init_db
 from app.extraction.schemas import ExtractedBusinessRecord, ExtractedRecordType
 from app.validation.rules import validate_extracted_record
-from tests.helpers import auth_headers, seed_demo_identity
+from tests.helpers import auth_headers, seed_demo_identity, wait_for_job
 
 
 def create_test_client() -> TestClient:
@@ -67,17 +67,19 @@ def test_validation_errors_endpoint_lists_persisted_findings() -> None:
         file_id = upload_response.json()["file_id"]
 
         extraction_response = client.post(f"/v1/files/{file_id}/extract", headers=headers)
-        assert extraction_response.status_code == 200
-        validation_errors = extraction_response.json()["validation_errors"]
+        assert extraction_response.status_code == 202
+        wait_for_job(client, extraction_response.json()["job_id"], headers)
 
-        assert validation_errors
-        assert any(error["error_type"] == "low_confidence" for error in validation_errors)
+        records_response = client.get("/v1/records", headers=headers)
+        assert records_response.status_code == 200
+        record_id = records_response.json()[0]["record_id"]
 
         list_response = client.get("/v1/validation-errors", headers=headers)
         assert list_response.status_code == 200
-        assert len(list_response.json()) == len(validation_errors)
+        validation_errors = list_response.json()
+        assert validation_errors
+        assert any(error["error_type"] == "low_confidence" for error in validation_errors)
 
-        record_id = extraction_response.json()["record"]["record_id"]
         record_response = client.get(
             f"/v1/validation-errors/records/{record_id}",
             headers=headers,

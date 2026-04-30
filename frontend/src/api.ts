@@ -231,6 +231,13 @@ export async function createJob(fileId: string): Promise<ProcessingJobResponse> 
   return parseJsonResponse<ProcessingJobResponse>(response);
 }
 
+export async function getJob(jobId: string): Promise<ProcessingJobResponse> {
+  const response = await fetch(`${API_BASE_URL}/v1/jobs/${jobId}`, {
+    headers: authHeaders(),
+  });
+  return parseJsonResponse<ProcessingJobResponse>(response);
+}
+
 export async function parseFile(fileId: string): Promise<ParsedDocumentResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/files/${fileId}/parsed`, {
     headers: authHeaders(),
@@ -238,12 +245,12 @@ export async function parseFile(fileId: string): Promise<ParsedDocumentResponse>
   return parseJsonResponse<ParsedDocumentResponse>(response);
 }
 
-export async function extractFile(fileId: string): Promise<ExtractionRunResponse> {
+export async function extractFile(fileId: string): Promise<ProcessingJobResponse> {
   const response = await fetch(`${API_BASE_URL}/v1/files/${fileId}/extract`, {
     method: "POST",
     headers: authHeaders(),
   });
-  return parseJsonResponse<ExtractionRunResponse>(response);
+  return parseJsonResponse<ProcessingJobResponse>(response);
 }
 
 export async function getRecords(): Promise<ExtractedRecordResponse[]> {
@@ -251,6 +258,15 @@ export async function getRecords(): Promise<ExtractedRecordResponse[]> {
     headers: authHeaders(),
   });
   return parseJsonResponse<ExtractedRecordResponse[]>(response);
+}
+
+export async function getValidationErrorsForRecord(
+  recordId: string,
+): Promise<ValidationErrorResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/v1/validation-errors/records/${recordId}`, {
+    headers: authHeaders(),
+  });
+  return parseJsonResponse<ValidationErrorResponse[]>(response);
 }
 
 export async function createReport(

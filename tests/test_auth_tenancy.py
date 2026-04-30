@@ -8,6 +8,7 @@ from app.auth.service import AuthorizationError, require_permission
 from app.db.models import ExtractedRecord, ProcessingJob, UploadedFile
 from app.db.session import get_sessionmaker
 from tests.conftest import TestAppContext
+from tests.helpers import wait_for_job
 
 
 def test_demo_admin_can_login_and_read_workspace_context(test_app: TestAppContext) -> None:
@@ -131,7 +132,8 @@ def test_authenticated_pipeline_persists_workspace_scope(test_app: TestAppContex
         f"/v1/files/{upload_response.json()['file_id']}/extract",
         headers=headers,
     )
-    assert extract_response.status_code == 200
+    assert extract_response.status_code == 202
+    wait_for_job(client, extract_response.json()["job_id"], headers)
 
     uploaded_file = asyncio.run(get_first_row(settings.database_url, UploadedFile))
     processing_job = asyncio.run(get_first_row(settings.database_url, ProcessingJob))

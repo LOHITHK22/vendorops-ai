@@ -1,18 +1,17 @@
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission_dependency, tenant_ids
-from app.api.routes.records import to_record_response
-from app.api.routes.validation import to_validation_error_response
-from app.api.schemas import CreateJobRequest, ExtractionRunResponse, ProcessingJobResponse
+from app.api.schemas import CreateJobRequest, ProcessingJobResponse
+from app.api.serializers import to_processing_job_response
 from app.auth.service import AuthContext
 from app.config.settings import Settings, get_settings
 from app.db.repositories import create_processing_job, get_processing_job, get_uploaded_file
 from app.db.session import get_db_session
-from app.pipeline.document_pipeline import PipelineError, PipelineInputError, run_document_pipeline
+from app.workers.document_jobs import enqueue_document_job
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -49,15 +48,7 @@ async def create_job(
         workspace_id=workspace_id,
     )
 
-    return ProcessingJobResponse(
-        job_id=UUID(job.id),
-        file_id=UUID(job.file_id),
-        pipeline=job.pipeline,
-        status=job.status,
-        created_at=job.created_at,
-        updated_at=job.updated_at,
-        error_message=job.error_message,
-    )
+    return to_processing_job_response(job)
 
 
 @router.get("/{job_id}", response_model=ProcessingJobResponse)
@@ -79,24 +70,21 @@ async def get_job(
             detail=f"Job '{job_id}' was not found.",
         )
 
-    return ProcessingJobResponse(
-        job_id=UUID(job.id),
-        file_id=UUID(job.file_id),
-        pipeline=job.pipeline,
-        status=job.status,
-        created_at=job.created_at,
-        updated_at=job.updated_at,
-        error_message=job.error_message,
-    )
+    return to_processing_job_response(job)
 
 
-@router.post("/{job_id}/run", response_model=ExtractionRunResponse)
+@router.post(
+    "/{job_id}/run",
+    response_model=ProcessingJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def run_job(
     job_id: UUID,
+    background_tasks: BackgroundTasks,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
-) -> ExtractionRunResponse:
+) -> ProcessingJobResponse:
     organization_id, workspace_id = tenant_ids(context)
     job = await get_processing_job(
         session,
@@ -121,36 +109,6 @@ async def run_job(
             detail=f"Job '{job_id}' has already completed.",
         )
 
-    try:
-        pipeline_result = await run_document_pipeline(
-            session=session,
-            settings=settings,
-            file_id=UUID(job.file_id),
-            organization_id=organization_id,
-            workspace_id=workspace_id,
-            job=job,
-        )
-    except PipelineInputError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except PipelineError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
-        ) from exc
+    enqueue_document_job(background_tasks, settings=settings, job_id=job_id)
 
-    return ExtractionRunResponse(
-        job=ProcessingJobResponse(
-            job_id=UUID(pipeline_result.job.id),
-            file_id=UUID(pipeline_result.job.file_id),
-            pipeline=pipeline_result.job.pipeline,
-            status=pipeline_result.job.status,
-            created_at=pipeline_result.job.created_at,
-            updated_at=pipeline_result.job.updated_at,
-            error_message=pipeline_result.job.error_message,
-        ),
-        record=to_record_response(pipeline_result.record),
-        validation_errors=[
-            to_validation_error_response(validation_error)
-            for validation_error in pipeline_result.validation_errors
-        ],
-    )
+    return to_processing_job_response(job)

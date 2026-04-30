@@ -1,4 +1,5 @@
 from tests.conftest import TestAppContext
+from tests.helpers import extract_file_and_wait
 
 
 def test_analytics_dashboard_answers_operational_questions(test_app: TestAppContext) -> None:
@@ -19,8 +20,7 @@ def test_analytics_dashboard_answers_operational_questions(test_app: TestAppCont
     assert upload_response.status_code == 201
     file_id = upload_response.json()["file_id"]
 
-    extraction_response = client.post(f"/v1/files/{file_id}/extract", headers=headers)
-    assert extraction_response.status_code == 200
+    extract_file_and_wait(client, file_id, headers)
 
     report_response = client.post(
         "/v1/reports",

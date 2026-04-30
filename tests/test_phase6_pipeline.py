@@ -9,7 +9,7 @@ from app.api.main import app
 from app.config.settings import Settings, get_settings
 from app.db.models import ExtractedRecord, ProcessingJob
 from app.db.session import get_sessionmaker, init_db
-from tests.helpers import auth_headers, seed_demo_identity
+from tests.helpers import auth_headers, seed_demo_identity, wait_for_job
 
 
 def create_test_client() -> tuple[TestClient, Settings]:
@@ -68,14 +68,19 @@ def test_queued_job_runs_document_pipeline_once() -> None:
         assert job_response.json()["status"] == "queued"
 
         run_response = client.post(f"/v1/jobs/{job_id}/run", headers=headers)
-        assert run_response.status_code == 200
+        assert run_response.status_code == 202
         payload = run_response.json()
 
-        assert payload["job"]["job_id"] == job_id
-        assert payload["job"]["status"] == "completed"
-        assert payload["record"]["job_id"] == job_id
-        assert payload["record"]["external_reference"] == "INV-777"
-        assert payload["record"]["normalized_payload"]["total_amount"] == 425.5
+        assert payload["job_id"] == job_id
+        completed_job = wait_for_job(client, job_id, headers)
+        assert completed_job["status"] == "completed"
+
+        records_response = client.get("/v1/records", headers=headers)
+        assert records_response.status_code == 200
+        record = records_response.json()[0]
+        assert record["job_id"] == job_id
+        assert record["external_reference"] == "INV-777"
+        assert record["normalized_payload"]["total_amount"] == 425.5
 
         assert asyncio.run(count_rows(settings.database_url, ProcessingJob)) == 1
         assert asyncio.run(count_rows(settings.database_url, ExtractedRecord)) == 1

@@ -11,7 +11,7 @@ from app.db.models import ExtractedRecord, ProcessingJob
 from app.db.session import get_sessionmaker, init_db
 from app.extraction.extractor import MockExtractor
 from app.parsers.dispatcher import parse_file
-from tests.helpers import auth_headers, seed_demo_identity
+from tests.helpers import auth_headers, seed_demo_identity, wait_for_job
 
 
 def create_test_client() -> tuple[TestClient, Settings]:
@@ -73,19 +73,18 @@ def test_extract_endpoint_persists_record_and_job() -> None:
         file_id = upload_response.json()["file_id"]
 
         extraction_response = client.post(f"/v1/files/{file_id}/extract", headers=headers)
-        assert extraction_response.status_code == 200
-        payload = extraction_response.json()
-
-        assert payload["job"]["status"] == "completed"
-        assert payload["record"]["record_type"] == "invoice"
-        assert payload["record"]["vendor_name"] == "Acme Software LLC"
-        assert payload["record"]["external_reference"] == "INV-009"
-        assert payload["record"]["normalized_payload"]["total_amount"] == 199.0
-        assert payload["validation_errors"] == []
+        assert extraction_response.status_code == 202
+        job = wait_for_job(client, extraction_response.json()["job_id"], headers)
+        assert job["status"] == "completed"
 
         records_response = client.get("/v1/records", headers=headers)
         assert records_response.status_code == 200
-        assert len(records_response.json()) == 1
+        records = records_response.json()
+        assert len(records) == 1
+        assert records[0]["record_type"] == "invoice"
+        assert records[0]["vendor_name"] == "Acme Software LLC"
+        assert records[0]["external_reference"] == "INV-009"
+        assert records[0]["normalized_payload"]["total_amount"] == 199.0
 
         assert asyncio.run(count_rows(settings.database_url, ProcessingJob)) == 1
         assert asyncio.run(count_rows(settings.database_url, ExtractedRecord)) == 1

@@ -26,3 +26,28 @@ def auth_headers(client: TestClient, settings: Settings) -> dict[str, str]:
     )
     assert response.status_code == 200
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def wait_for_job(
+    client: TestClient,
+    job_id: str,
+    headers: dict[str, str],
+    *,
+    expected_status: str = "completed",
+) -> dict:
+    latest_payload = {}
+    for _ in range(5):
+        response = client.get(f"/v1/jobs/{job_id}", headers=headers)
+        assert response.status_code == 200
+        latest_payload = response.json()
+        if latest_payload["status"] in {"completed", "failed"}:
+            break
+    assert latest_payload["status"] == expected_status
+    return latest_payload
+
+
+def extract_file_and_wait(client: TestClient, file_id: str, headers: dict[str, str]) -> dict:
+    response = client.post(f"/v1/files/{file_id}/extract", headers=headers)
+    assert response.status_code == 202
+    job = response.json()
+    return wait_for_job(client, job["job_id"], headers)

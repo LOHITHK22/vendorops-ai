@@ -1,21 +1,20 @@
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission_dependency, tenant_ids
-from app.api.routes.records import to_record_response
-from app.api.routes.validation import to_validation_error_response
 from app.api.schemas import (
-    ExtractionRunResponse,
     ParsedDocumentResponse,
     ProcessingJobResponse,
     UploadedFileResponse,
 )
+from app.api.serializers import to_processing_job_response
 from app.auth.service import AuthContext
 from app.config.settings import Settings, get_settings
 from app.db.repositories import (
+    create_processing_job,
     create_uploaded_file,
     get_uploaded_file,
 )
@@ -23,8 +22,8 @@ from app.db.session import get_db_session
 from app.ingestion.storage import store_upload
 from app.parsers.dispatcher import parse_file
 from app.parsers.models import ParserError
-from app.pipeline.document_pipeline import PipelineError, PipelineInputError, run_document_pipeline
 from app.storage.factory import get_object_storage
+from app.workers.document_jobs import enqueue_document_job
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -104,43 +103,39 @@ async def parse_uploaded_file(
     return ParsedDocumentResponse(**parsed_document.model_dump())
 
 
-@router.post("/{file_id}/extract", response_model=ExtractionRunResponse)
+@router.post(
+    "/{file_id}/extract",
+    response_model=ProcessingJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def extract_uploaded_file(
     file_id: UUID,
+    background_tasks: BackgroundTasks,
     settings: Annotated[Settings, Depends(get_settings)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     context: Annotated[AuthContext, Depends(require_permission_dependency("pipeline:write"))],
-) -> ExtractionRunResponse:
+) -> ProcessingJobResponse:
     organization_id, workspace_id = tenant_ids(context)
-    try:
-        pipeline_result = await run_document_pipeline(
-            session=session,
-            settings=settings,
-            file_id=file_id,
-            organization_id=organization_id,
-            workspace_id=workspace_id,
-        )
-    except PipelineInputError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except PipelineError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
-        ) from exc
-
-    return ExtractionRunResponse(
-        job=ProcessingJobResponse(
-            job_id=UUID(pipeline_result.job.id),
-            file_id=UUID(pipeline_result.job.file_id),
-            pipeline=pipeline_result.job.pipeline,
-            status=pipeline_result.job.status,
-            created_at=pipeline_result.job.created_at,
-            updated_at=pipeline_result.job.updated_at,
-            error_message=pipeline_result.job.error_message,
-        ),
-        record=to_record_response(pipeline_result.record),
-        validation_errors=[
-            to_validation_error_response(validation_error)
-            for validation_error in pipeline_result.validation_errors
-        ],
+    uploaded_file = await get_uploaded_file(
+        session,
+        file_id,
+        organization_id=organization_id,
+        workspace_id=workspace_id,
     )
+    if uploaded_file is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File '{file_id}' was not found.",
+        )
+
+    job = await create_processing_job(
+        session,
+        job_id=uuid4(),
+        file_id=file_id,
+        pipeline="document_extraction",
+        organization_id=organization_id,
+        workspace_id=workspace_id,
+    )
+    enqueue_document_job(background_tasks, settings=settings, job_id=UUID(job.id))
+
+    return to_processing_job_response(job)

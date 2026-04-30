@@ -92,6 +92,7 @@ Phase 10 is complete:
 - Docker Compose now runs the application against PostgreSQL with persistent database storage.
 - Storage abstraction added for uploads and generated report artifacts.
 - Upload filename sanitization and configurable upload size limits added.
+- Pipeline execution now uses background job dispatch instead of blocking API requests.
 
 ## Local Setup
 
@@ -504,7 +505,11 @@ The orchestration service is used by both:
 - `POST /v1/files/{file_id}/extract`
 - `POST /v1/jobs/{job_id}/run`
 
-This keeps route handlers thin and makes the pipeline easier to test, reuse, and eventually run from a background worker.
+These endpoints now return `202 Accepted` with a queued job. A local FastAPI background worker
+executes the pipeline with a fresh database session, updates job status, and persists records,
+validation findings, audit events, and extraction errors. This keeps route handlers thin and
+sets up the next production step: replacing local background tasks with a durable Redis/Celery,
+RQ, or cloud queue worker.
 
 ## Reporting
 
